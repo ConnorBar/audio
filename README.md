@@ -8,7 +8,7 @@ i am currently filtering out all sentences and only using single words to make t
 
 directory structure is mainly based on `constants.py` which can be modified.
 
-corpus directories should contain the .tsv files and `.mp3` or `.wav` files if you have dataset downloaded. i removed the `zh-CN` directory from path since its unnecessary
+corpus directories should contain the `.tsv` files and `.mp3` or `.wav` files if you have dataset downloaded. i removed the `zh-CN` directory from path since its unnecessary
 
 test contained some select `.wav` files for testing, not necessary
 
