@@ -1,0 +1,17 @@
+# ignore all wav mp3 and files (almost 30gb)
+*.wav
+*.mp3
+
+# ignore all data files
+*.tsv
+*.csv
+*.npy
+
+# ignore Jupyter notebook checkpoints
+.ipynb_checkpoints/
+
+# ignore Python cache files and directories
+__pycache__/
+*.py[cod]
+
+.DS_Store
