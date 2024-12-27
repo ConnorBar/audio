@@ -4,7 +4,7 @@ from tqdm import tqdm
 import pandas as pd
 import os
 
-from data.constants import RESULTS_PATH, LARGE_WAV_DIR, LARGE_MP3_DIR
+from data.constants import RESULTS_PATH, LARGE_WAV_DIR, LARGE_MP3_DIR, POOL_NUM
 
 result = pd.read_csv(RESULTS_PATH)
 
@@ -16,7 +16,7 @@ def f(path):
     print(f"Error processing {path}: {str(e)}")
 
 def main():
-  with Pool(8) as p:
+  with Pool(POOL_NUM) as p:
     total = len(result['path'])
     list(tqdm(p.imap(f, result['path']), total=total, desc="Converting audio"))
 

@@ -5,10 +5,9 @@ from tqdm import tqdm
 from multiprocessing import Pool
 import os
 
-from data.constants import LARGE_WAV_DIR, MAX_FRAMES, DATA_DIR
+from data.constants import RESULTS_PATH, LARGE_WAV_DIR, MAX_FRAMES, DATA_DIR, POOL_NUM
 
-
-result = pd.read_csv('result.csv')
+result = pd.read_csv(RESULTS_PATH)
 
 def feature_calculation(args):
   wav_file, tone = args
@@ -39,7 +38,7 @@ def feature_calculation(args):
     return None, None  
   
 def main():
-  with Pool(8) as p:
+  with Pool(POOL_NUM) as p:
     total = len(result['path'])
     results = list(tqdm(p.imap(feature_calculation, zip(result['wav_path'], result['tone'])), total=total, desc="Feature Extraction"))
   
