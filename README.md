@@ -2,7 +2,7 @@
 the data comes from common voice mozilla. i am using the Common Voice Corpus 20.0 which is around 21.21 GB
 
 ### Current Work
-- currently filtering out all sentences and only using single words to make the process easier at first. 
+- currently filtering out all sentences and only using single words to make the process easier at first. (only around 2.3 GB of clips to process)
   - will likely go back and add sentence handling
   - ideally will also add more features in `feature-extraction.py` instead of just mfccs & spectral centroid
   - also need to research more about what the features actually mean and which ones are useful
