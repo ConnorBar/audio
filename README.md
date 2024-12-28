@@ -14,6 +14,7 @@ directory structure is mainly based on `constants.py` which can be modified.
 
 - corpus directories should contain the `.tsv` files and `.mp3` or `.wav` files if you have dataset downloaded. i removed the `zh-CN` directory from path since its unnecessary
 - the `test` directory contains some select `.wav` files for testing, not necessary
+- the `data` direcotry is where the modified database (`results.csv`) & extracted features and labels numpy files (`features.npy` and `labels.npy`) are stored
 
 ### Scripts
 - both `mp3towav.py` and `feature-extraction.py` use multiprocessing for speed boost
