@@ -4,6 +4,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 DATA_DIR = os.path.join(BASE_DIR, 'data')
 SCRIPTS_DIR = os.path.join(BASE_DIR, 'scripts')
+MODELS_DIR = os.path.join(BASE_DIR, 'models')
 
 RESULTS_PATH = os.path.join(DATA_DIR, 'result.csv')
 LARGE_WAV_DIR = os.path.join(BASE_DIR, 'DANGER', 'large-wav')
