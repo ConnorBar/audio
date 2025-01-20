@@ -32,3 +32,9 @@ only using a few main libraries which are in `environment.yaml`.
 - run `python -m scripts.mp3towav.py` from the ***home directory***
 - run `python -m scripts.feature-extraction.py` from the ***home directory***
 - [WIP] building model  
+
+### To Do/Future:
+- Raytune for hyper parameter tuning
+- Online data augmentation
+  - randomizing which data it applies it to
+- Only want to include original data in testing data 

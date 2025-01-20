@@ -34,3 +34,11 @@ case "$1" in
     ;;
 esac
 ```
+
+
+
+### thoughts:
+
+mimic boosting, pick random samples and choose how to augment them and how many to make
+
+have an algorithmic approach to augmenting, so like for second tones which are more rare, i can make way more examples for
