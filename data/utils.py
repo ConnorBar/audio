@@ -26,8 +26,8 @@ class AugmentedTonesDataset(Dataset):
   def __getitem__(self, idx):
     feats = self.features[idx]
     
-    if torch.rand(1).item() < self.augment_prob:
-      feats = self.specAugment(feats)
+    # if torch.rand(1).item() < self.augment_prob:
+    #   feats = self.specAugment(feats)
 
     return feats, self.labels[idx]
 

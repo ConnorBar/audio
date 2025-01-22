@@ -5,8 +5,13 @@ none yet, can do any of these:
 - time stretch: make it slower or faster
 - add noise: makes it a little more noisy for model to learn from
 
+### Augmentation
+- added proportion based sampling for augmentation selection
+
+
 ### Spectrogram Augments
-as of right now i just standardize the mfccs
+- as of right now i just standardize the mfccs
+- 
 
 none yet, can do any of these:
 - Frequency mask
