@@ -11,7 +11,7 @@ none yet, can do any of these:
 
 ### Spectrogram Augments
 - as of right now i just standardize the mfccs
-- 
+- can also look into wavelets as opposed to mfccs
 
 none yet, can do any of these:
 - Frequency mask

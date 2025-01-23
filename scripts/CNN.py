@@ -8,7 +8,7 @@ from torch.utils.data import Dataset, DataLoader, Subset
 from torch.utils.tensorboard import SummaryWriter
 from sklearn.model_selection import train_test_split
 
-from data.constants import *
+from utils.constants import *
 from models.BasicCNN import ChineseToneCNN, ChineseTonesDataset
 
 # Load in data

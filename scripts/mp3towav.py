@@ -4,7 +4,7 @@ from tqdm import tqdm
 import pandas as pd
 import os
 
-from data.constants import RESULTS_PATH, LARGE_WAV_DIR, LARGE_MP3_DIR, POOL_NUM
+from utils.constants import RESULTS_PATH, LARGE_WAV_DIR, LARGE_MP3_DIR, POOL_NUM
 
 result = pd.read_csv(RESULTS_PATH)
 
