@@ -13,6 +13,9 @@
 # ignore lightning logs & tensorboard stuff
 lightning_logs/*
 runs/*
+*.log
+*.ckpt
+*.pyc
 
 # ignore Python cache files and directories
 __pycache__/
