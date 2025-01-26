@@ -24,17 +24,34 @@ directory structure is mainly based on `constants.py` which can be modified.
 only using a few main libraries which are in `environment.yaml`. 
 - using `librosa` for feature extraction & visualiation of audio data
 - using `pydub` for `.mp3` to `.wav`
-- using `pytorch` for cnn model
+- using `pytorch` for models
 - other self explanatory libraries (i.e. `multiprocessing`)
 
 ### To Run
 - use the `tone-recognition.ipynb` notebook up until it gets to exporting to wav
 - run `python -m scripts.mp3towav.py` from the ***home directory***
 - run `python -m scripts.feature-extraction.py` from the ***home directory***
-- [WIP] building model  
+- use the `resnet-testing.ipynb` or the end of the `tone-recognition.ipynb` notebook to 
 
 ### To Do/Future:
 - Raytune for hyper parameter tuning
-- Online data augmentation
-  - randomizing which data it applies it to
-- Only want to include original data in testing data 
+- Use wavelets for extracted features
+- add analysis of model performance - PyTorch Lightning
+  - https://lightning.ai/docs/pytorch/stable/
+  - loss, acc etc graphs
+  - tensorboard?
+- Test using an RNN
+- sentence segmentation
+  - could use these as a validation dataset or just more training examples
+  - need the tone tho which might kind of harder since much more words to classify - if i can get the tone classification good on this dataset then i could maybe use this to classify the tones for the new words? sandhis might get messy tho
+- Test using some basic transformer architecture
+  - i think i would need different features for this?
+
+### FEB 10TH DEADLINE (self imposed)
+- classify tone and pinyin for the inputted words
+- essentialyl could have like 3 different classifiers
+  - one to predict the tone
+  - one to predict the vowel - (zh, ch, q, s, c, etc)
+  - one to predict the consonants - (ou, ia, etc)
+- to do this i will need much more data for different words
+  - sentence segmentation is a must and data labeling too

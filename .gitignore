@@ -10,6 +10,10 @@
 # ignore Jupyter notebook checkpoints
 .ipynb_checkpoints/
 
+# ignore lightning logs & tensorboard stuff
+lightning_logs/*
+runs/*
+
 # ignore Python cache files and directories
 __pycache__/
 *.py[cod]
