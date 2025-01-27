@@ -20,18 +20,19 @@ directory structure is mainly based on `constants.py` which can be modified.
 - both `mp3towav.py` and `feature-extraction.py` use multiprocessing for speed boost
 - modify how many pools to create in `constants.py` - currently set to `os.cpu_count() - 2`
 
+
 ### Libraries
-only using a few main libraries which are in `environment.yaml`. 
 - using `librosa` for feature extraction & visualiation of audio data
 - using `pydub` for `.mp3` to `.wav`
 - using `pytorch` for models
+- using `lightning` for organization of training process
 - other self explanatory libraries (i.e. `multiprocessing`)
 
 ### To Run
-- use the `tone-recognition.ipynb` notebook up until it gets to exporting to wav
-- run `python -m scripts.mp3towav.py` from the ***home directory***
-- run `python -m scripts.feature-extraction.py` from the ***home directory***
-- use the `resnet-testing.ipynb` or the end of the `tone-recognition.ipynb` notebook to 
+- run `python -m scripts.single-word-filter` from the ***home directory***
+- run `python -m scripts.mp3towav` from the ***home directory***
+- run `python -m scripts.feature-extraction` from the ***home directory***
+- refer to the READ.me in `scripts` to run `resnet-testing.py` to train
 
 ### To Do/Future:
 - Raytune for hyper parameter tuning

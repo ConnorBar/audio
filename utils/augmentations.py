@@ -41,24 +41,26 @@ def augment_raw_audio(audio, sr, aug_threshold = 0.5):
   return augmented_sample
 
   
-def assign_augmentations(X_train: List[str], y_train: List[int], augments_needed: Dict[int, int]) -> List[Tuple[str, int, bool]]:  
+def assign_augmentations(X_train: List[str], y_train: List[List[int]], augments_needed: Dict[int, int]) -> List[Tuple[str, int, bool]]:  
   """ 
   resamples the req number to get target dist from each class and labels the resampled for augmentation
 
   Args:
       X_train (List): train data
-      y_train (List): train labels
+      y_train (List): list of multiple train labels, need to pair them
       augments_needed (Dict): mapping of class labels to the number of augmentations needed
 
   Returns:
       Tuple[List, List, List]: modifed X_train, y_train & indicator if sample will be augmented
   """
+  y_tones, y_words = zip(*y_train)
   grouped_examples = {clss: [] for clss in augments_needed.keys()}
-  for x, y in zip(X_train, y_train):
-    grouped_examples[y].append(x)
+  for x, y, z in zip(X_train, y_tones, y_words):
+    grouped_examples[y].append((x, z))
     
   X_train_new = []
-  y_train_new = []
+  y_tones_new = []
+  y_words_new = []
   will_augment = []
 
   # resampling each class, adding og & resampled to new X & new y & marking resampled ones for augmentation
@@ -66,12 +68,13 @@ def assign_augmentations(X_train: List[str], y_train: List[int], augments_needed
     original_samples = grouped_examples[clss]
     augment_samples = resample(original_samples, replace=True, n_samples=n_samples, random_state=RANDOM_SEED)
 
-    X_train_new.extend(original_samples + augment_samples)
-    y_train_new.extend([clss] * (len(original_samples) + len(augment_samples)))
+    X_train_new.extend([x for x, _ in original_samples] + [x for x, _ in augment_samples])
+    y_tones_new.extend([clss] * (len(original_samples) + len(augment_samples)))
+    y_words_new.extend([y_word for _, y_word in original_samples] + [y_word for _, y_word in augment_samples])
     will_augment.extend([False] * len(original_samples) + [True] * len(augment_samples))
 
   # shuffle to avoid any issues training later - sorted data iffy
-  combined_data = list(zip(X_train_new, y_train_new, will_augment))
+  combined_data = list(zip(X_train_new, y_tones_new, y_words_new, will_augment))
   shuffle(combined_data)
     
   return combined_data

@@ -42,4 +42,3 @@ def GetDevice():
   return device
 
 
-
