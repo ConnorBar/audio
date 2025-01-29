@@ -45,8 +45,16 @@ directory structure is mainly based on `constants.py` which can be modified.
 - sentence segmentation
   - could use these as a validation dataset or just more training examples
   - need the tone tho which might kind of harder since much more words to classify - if i can get the tone classification good on this dataset then i could maybe use this to classify the tones for the new words? sandhis might get messy tho
+- Implement a MTL
+  - no idea how to do this at the moment, but should be able to help learn the implicit rules of initials and finals i hope?
+  - also would want some sort of contraint on inits and finals since some dont match
+  - if i want it to train and learn these contraints, i can do this prior to soft maxing
+  - essentially check both, mask the other one for only the valid combos of finals for initials, say its lukewarm prob its a match
+  - check other way, mask the inits for only the possible ones based on the final, and say one of them is a much higher prob than the based predicted one then can essentially swap? the prediction to the higher prob one?
+  - will need to look up how to do this
 - Test using some basic transformer architecture
   - i think i would need different features for this?
+
 
 ### FEB 10TH DEADLINE (self imposed)
 - classify tone and pinyin for the inputted words

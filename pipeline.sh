@@ -8,4 +8,4 @@ python -m scripts.mp3towav
 echo "Extracting features and exporting..."
 python -m scripts.feature-extraction
 
-echo "Done! You can run the training file now!"
+echo "Done! You can start training now!"

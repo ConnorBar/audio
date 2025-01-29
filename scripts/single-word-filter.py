@@ -1,30 +1,41 @@
 import pandas as pd
 from utils.constants import RESULTS_PATH
 
-# Specify dtype for columns to avoid DtypeWarning
-dtype_spec = {'column4': str, 'column8': str, 'column12': str}
-df = pd.read_csv('./large-corpus/other.tsv', sep='\t', dtype=dtype_spec, low_memory=False)
-mdf = df[['path', 'sentence']]  # make a copy to avoid the SettingWithCopyWarning
+from pypinyin import lazy_pinyin, Style
+import re
 
-mdf = mdf[mdf['sentence'].str.len() == 1]
+def breakdown_pinyin(phrase):
+  clean_phrase = re.sub(r'[^\w]', '', phrase)
+  initial = lazy_pinyin(clean_phrase, style=Style.INITIALS, strict=False)[0]
+  final = lazy_pinyin(clean_phrase, style=Style.FINALS, strict=False)[0]
+  tone = [ word[-1] for word in lazy_pinyin(clean_phrase, style=Style.FINALS_TONE3, strict=False, neutral_tone_with_five=True, tone_sandhi=True)][0]
 
-value_counts = mdf['sentence'].value_counts()
-filtered_value_counts = value_counts[value_counts >= 16]
+  return (initial if initial != '' else "EMPTY", final, str(tone))
 
-# Filter the original DataFrame to only include the rows where the 'sentence' column is in the filtered values
-result = mdf[mdf['sentence'].isin(filtered_value_counts.index)].copy()
-result.loc[:, 'wav_path'] = result['path'].apply(lambda x: x.split('_')[-1][:-4] + ".wav")
 
-sentence_to_tone = {
-  '一': 1, '八': 1, '六': 4, '三': 3, '七': 1, '五': 3,
-  '四': 4, '是': 4, '九': 3, '零': 2, '二': 4, '否': 3
-}
+def main():
+  # Specify dtype for columns to avoid DtypeWarning
+  dtype_spec = {'column4': str, 'column8': str, 'column12': str}
+  df = pd.read_csv('./large-corpus/other.tsv', sep='\t', dtype=dtype_spec, low_memory=False)
+  mdf = df[['path', 'sentence']]  # make a copy to avoid the SettingWithCopyWarning
 
-result.loc[:, 'tone'] = result['sentence'].map(sentence_to_tone)
+  mdf = mdf[mdf['sentence'].str.len() == 1]
 
-word_labels = { word: i for i, word in enumerate(list(result['sentence'].unique())) }
-result.loc[:, 'word_label'] = result['sentence'].map(word_labels)
+  value_counts = mdf['sentence'].value_counts()
+  filtered_value_counts = value_counts[value_counts >= 16]
 
-result = result.reset_index(drop=True)
+  # Filter the original DataFrame to only include the rows where the 'sentence' column is in the filtered values
+  result = mdf[mdf['sentence'].isin(filtered_value_counts.index)].copy()
+  result.loc[:, 'wav_path'] = result['path'].apply(lambda x: x.split('_')[-1][:-4] + ".wav")
 
-result.to_csv(RESULTS_PATH, index=False)
+  # map characters to pinyin - inits, finals, tones
+  labels = result['sentence'].apply(lambda x: pd.Series(breakdown_pinyin(x))).rename(columns={0: 'initial', 1: 'final', 2: 'tone'})
+  newDF = pd.concat([result, labels], axis=1)
+
+  newDF = newDF.reset_index(drop=True)
+
+  newDF.to_csv(RESULTS_PATH, index=False)
+
+
+if __name__ == '__main__':
+  main()
