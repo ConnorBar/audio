@@ -6,6 +6,7 @@
 *.tsv
 *.csv
 *.npy
+*.pkl
 
 # ignore Jupyter notebook checkpoints
 .ipynb_checkpoints/

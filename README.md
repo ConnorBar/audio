@@ -4,10 +4,8 @@ the data comes from common voice mozilla. i am using the Common Voice Corpus 20.
 ### Current Work
 - currently filtering out all sentences and only using single words to make the process easier at first. (only around 2.3 GB of clips to process)
   - will likely go back and add sentence handling
-  - ideally will also add more features in `feature-extraction.py` instead of just mfccs & spectral centroid
-  - also need to research more about what the features actually mean and which ones are useful
-  - pipeline should remain fairly the same. minor changes to `feature-extraction.py` and input dimensions for CNN would be expected
-- eventually should make the whole pipeline smoother but it works for now
+  - ideally will also add more features in `feature-extraction.py` instead of just mfccs
+    - can look at simple mel spectograms and or wavelets
 
 ### Directory Structure
 directory structure is mainly based on `constants.py` which can be modified.
@@ -20,7 +18,6 @@ directory structure is mainly based on `constants.py` which can be modified.
 - both `mp3towav.py` and `feature-extraction.py` use multiprocessing for speed boost
 - modify how many pools to create in `constants.py` - currently set to `os.cpu_count() - 2`
 
-
 ### Libraries
 - using `librosa` for feature extraction & visualiation of audio data
 - using `pydub` for `.mp3` to `.wav`
@@ -32,35 +29,28 @@ directory structure is mainly based on `constants.py` which can be modified.
 - run `python -m scripts.single-word-filter` from the ***home directory***
 - run `python -m scripts.mp3towav` from the ***home directory***
 - run `python -m scripts.feature-extraction` from the ***home directory***
-- refer to the READ.me in `scripts` to run `resnet-testing.py` to train
+  - can also just use `./pipeline.sh`
+- refer to the READ.me in `/scripts` to run `resnet-testing.py` to train
 
 ### To Do/Future:
 - Raytune for hyper parameter tuning
 - Use wavelets for extracted features
 - add analysis of model performance - PyTorch Lightning
   - https://lightning.ai/docs/pytorch/stable/
-  - loss, acc etc graphs
   - tensorboard?
 - Test using an RNN
 - sentence segmentation
   - could use these as a validation dataset or just more training examples
-  - need the tone tho which might kind of harder since much more words to classify - if i can get the tone classification good on this dataset then i could maybe use this to classify the tones for the new words? sandhis might get messy tho
 - Implement a MTL
-  - no idea how to do this at the moment, but should be able to help learn the implicit rules of initials and finals i hope?
-  - also would want some sort of contraint on inits and finals since some dont match
+  - need to add some sort of contraint on inits and finals since some dont match
   - if i want it to train and learn these contraints, i can do this prior to soft maxing
   - essentially check both, mask the other one for only the valid combos of finals for initials, say its lukewarm prob its a match
   - check other way, mask the inits for only the possible ones based on the final, and say one of them is a much higher prob than the based predicted one then can essentially swap? the prediction to the higher prob one?
-  - will need to look up how to do this
 - Test using some basic transformer architecture
-  - i think i would need different features for this?
-
 
 ### FEB 10TH DEADLINE (self imposed)
 - classify tone and pinyin for the inputted words
-- essentialyl could have like 3 different classifiers
+- use MTL with three task heads 
   - one to predict the tone
-  - one to predict the vowel - (zh, ch, q, s, c, etc)
-  - one to predict the consonants - (ou, ia, etc)
-- to do this i will need much more data for different words
-  - sentence segmentation is a must and data labeling too
+  - one to predict the initial - (zh, ch, q, s, c, etc)
+  - one to predict the final - (ou, ia, etc)

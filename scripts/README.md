@@ -4,7 +4,7 @@
 
 ### Spectrogram Augments
 - as of right now i just standardize the mfccs
-- can also look into wavelets as opposed to mfccs
+- can also look into wavelets as opposed to mfccs or in tandem as a second channel/append to the end
 
 none yet, can do any of these:
 - Frequency mask
@@ -35,5 +35,5 @@ esac
 
 ### training:
 ```
-python -m scripts.train-resnet --accelerator 'gpu' --devices 1 --model 'resnet
+python -m scripts.train --accelerator 'gpu' --devices 1 --model 'mtl'
 ```
