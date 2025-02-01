@@ -28,7 +28,8 @@ def feature_extraction(args) -> Tuple[List, List]:
     if augment:
       y = augment_raw_audio(y, sr)
     
-    # mfcc normalization 
+    # mfcc normalization  # MAY WANT TO BRING OUT THE MEL SPECTROGRAMS VS MFCCS
+    # librosa.feature.melspectrogram(y=y)
     mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
     scaler = StandardScaler(with_mean=True, with_std=True)
     mfcc_scaled = scaler.fit_transform(mfccs.T).T
@@ -62,13 +63,11 @@ def main():
 
   y_tone = result['tone'] # used for augmentation, may want to check the other labsels
   
-  TESTING = True
+  TESTING = False
   
   # test train split
   X_train, X_test, y_train, y_test = train_test_split(X, list(zip(y_tone, y)), train_size=0.7, shuffle=True, random_state=RANDOM_SEED)
 
-  # TODO REFACTOR HOW THE ONE-HOT IS BEING PUSHED THRU
- 
   """
   only doing this for train:
   instead of augmenting every example, can find the proportions of class distributions
@@ -77,22 +76,22 @@ def main():
   """   
   print("Splitting data and assigning augmentations...")
   # can do multiple augments depending on the class, might just it based on the tone
-  y_train_tone, y_train_one_hot = zip(*y_train)
-  y_test_tone, y_test_one_hot = zip(*y_test)
+  y_train_tone, y_train_mtl = zip(*y_train)
+  _, y_test_mtl = zip(*y_test)
 
   augment_rate = 1.2 # sample 20% of biggest tone class & augment them
   unique_classes, class_counts = torch.unique(torch.tensor(list(y_train_tone)), return_counts=True)
   target = class_counts.max() * augment_rate
   augments_needed = {clss.item(): max(0, int(target - count)) for clss, count in zip(unique_classes, class_counts)}
 
-  train_params = assign_augmentations(X_train=X_train, y_train=zip(y_train_tone, y_train_one_hot), augments_needed=augments_needed)
-  test_params =  list(zip(X_test, y_test_one_hot, [False] * len(X_test)))
+  train_params = assign_augmentations(X_train=X_train, y_train=zip(y_train_tone, y_train_mtl), augments_needed=augments_needed)
+  test_params =  list(zip(X_test, y_test_mtl, [False] * len(X_test)))
  
-  local_data_dir = CUR_FEATS_DIR
+  output_data_dir = CUR_FEATS_DIR
   if TESTING:
-    train_params = resample(list(train_params), n_samples=100)
-    test_params = resample(list(zip(X_test, y_test_one_hot, [False] * len(X_test))), n_samples=100)
-    local_data_dir = TEST_DATA_DIR
+    train_params = resample(list(train_params), n_samples=1000)
+    test_params = resample(list(zip(X_test, y_test_mtl, [False] * len(X_test))), n_samples=100)
+    output_data_dir = TEST_DATA_DIR
 
   # AUGMENTS - TRAIN feature extraction & pairing labels
   total = len(train_params)
@@ -113,8 +112,8 @@ def main():
   y_train_augmented = np.array(train_label)
   
   # exporting now as a checkpoint
-  np.save(local_data_dir / 'train_features.npy', X_train_augmented)
-  np.save(local_data_dir / 'train_labels.npy', y_train_augmented)
+  np.save(output_data_dir / 'train_features.npy', X_train_augmented)
+  np.save(output_data_dir / 'train_labels.npy', y_train_augmented)
   print("Train features and labels saved in \'data\' directory...")
 
   # NO AUGMENTS - TEST feature extraction & pairing labels
@@ -136,8 +135,8 @@ def main():
   y_test = np.array(test_labels)
   
   # exporting all features & labels
-  np.save(local_data_dir / 'test_features.npy', X_test)
-  np.save(local_data_dir / 'test_labels.npy', y_test)
+  np.save(output_data_dir / 'test_features.npy', X_test)
+  np.save(output_data_dir / 'test_labels.npy', y_test)
   print("Test features and labels saved in \'data\' directory...")
 
 if __name__ == '__main__':
