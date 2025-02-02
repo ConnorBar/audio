@@ -5,8 +5,6 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 import lightning as L
 
-# TODO NEED TO CHANGE HOW I AM HANDLING THE LABELS AGAIN LMFAO
-
 class MyLightningModule(L.LightningModule):
   def __init__(self, model, learning_rate=1e-3, batch_size=32, num_classes=4):
     super().__init__()
@@ -18,13 +16,19 @@ class MyLightningModule(L.LightningModule):
 
   def training_step(self, batch, batch_idx):
     x, y = batch
-    outputs = self.model(x)
-    train_loss = self.model.compute_loss(outputs, y)
-    acc = self.model.compute_accuracy(outputs, y)
-    f1 = self.model.compute_f1(outputs, y)
+    predictions = self.model(x)
+    train_loss = self.model.compute_loss(predictions, y)
+    acc = self.model.compute_accuracy(predictions, y)
+    init_acc, final_acc, tone_acc = self.model.compute_accuracy(predictions, y, average=True)
+    f1 = self.model.compute_f1(predictions, y)
     
     self.log("train_loss", train_loss, prog_bar=True)
     self.log("train_acc", acc, prog_bar=True)
+
+    self.log("train_init_acc", init_acc)
+    self.log("train_final_acc", final_acc)
+    self.log("train_tone_acc", tone_acc)
+
     self.log("train_f1", f1, prog_bar=True)
     return train_loss
   

@@ -6,8 +6,8 @@ import re
 
 def breakdown_pinyin(phrase):
   clean_phrase = re.sub(r'[^\w]', '', phrase)
-  initial = lazy_pinyin(clean_phrase, style=Style.INITIALS, strict=False)[0]
-  final = lazy_pinyin(clean_phrase, style=Style.FINALS, strict=False)[0]
+  initial = lazy_pinyin(clean_phrase, style=Style.INITIALS, strict=True)[0]
+  final = lazy_pinyin(clean_phrase, style=Style.FINALS, strict=True)[0]
   tone = [ word[-1] for word in lazy_pinyin(clean_phrase, style=Style.FINALS_TONE3, strict=False, neutral_tone_with_five=True, tone_sandhi=True)][0]
 
   return (initial if initial != '' else "EMPTY", final, str(tone))

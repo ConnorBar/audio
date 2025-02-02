@@ -63,7 +63,7 @@ def main(hparams):
                     devices=devices, 
                     accelerator=accelerator,
                     callbacks=[earlystop_callback, checkpoint_callback],
-                    fast_dev_run=7, # for testing
+                    # fast_dev_run=7, # for testing
                     # profiler="simple", # also for testing/debugging
   )
   trainer.fit(lit_model, datamodule=lit_dataloader)

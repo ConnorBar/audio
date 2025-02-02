@@ -1,11 +1,11 @@
+from multiprocessing import pool
 from typing import Tuple
 import torch
 import torch.nn as nn
 from torchmetrics import Accuracy, F1Score, CharErrorRate
 
-
 class MTLNetwork(nn.Module):
-  def __init__(self, feature_extractor, num_initials, num_finals, num_tones=5, lstm_hidden_dim=256, hard_param_sharing=True):
+  def __init__(self, feature_extractor, num_initials=10, num_finals=8, num_tones=5, lstm_hidden_dim=256, hard_param_sharing=True):
     super(MTLNetwork, self).__init__()
     
     # remove the last two layers of resnet (AdaptiveAvgPool2d and Linear)
@@ -22,9 +22,16 @@ class MTLNetwork(nn.Module):
     # self.shared_fc = nn.Linear(lstm_hidden_dim * 2, 256) # *2 for bidirectional LSTM
     
     # task specific heads
-    self.initial_head = nn.Linear(256, num_initials)
-    self.final_head = nn.Linear(256, num_finals)
-    self.tone_head = nn.Linear(256, num_tones)
+    self.initial_head = nn.Linear(256 * 2, num_initials)
+    self.final_head = nn.Linear(256 * 2, num_finals)
+    self.tone_head = nn.Linear(256 * 2, num_tones)
+
+    # going to add
+    self.sanity_head = nn.Linear(256 * 2, 2) # sane or insane
+    
+    self.num_initials = num_initials
+    self.num_finals = num_finals
+    self.num_tones = num_tones
     
     # class based metrics
     self.initial_accuracy = Accuracy(task="multiclass", num_classes=num_initials)
@@ -64,29 +71,33 @@ class MTLNetwork(nn.Module):
     finals_out = self.final_head(pooled_features)
     tones_out = self.tone_head(pooled_features)
 
+    sanity_out = self.tone_head(pooled_features)
+
     # TODO add masking to make certain combos not possible!!
     
     return initials_out, finals_out, tones_out
 
   # TODO consider uncertainty-based weighting, where the loss weights are also learned dynamically
-  def compute_loss(predictions, targets, weights=[1.0, 1.0, 1.0]):
+  def compute_loss(self, predictions, targets, weights=[1.0, 1.0, 1.0]):
     initial_preds, final_preds, tone_preds = predictions
-    initial_target, final_target, tone_target = targets
-    
-    initial_loss = nn.CrossEntropyLoss(initial_preds, initial_target)
-    final_loss = nn.CrossEntropyLoss(final_preds, final_target)
-    tone_loss = nn.CrossEntropyLoss(tone_preds, tone_target)
+    initial_target, final_target, tone_target = targets[:, 0], targets[:, 1], targets[:, 2]
+
+    criterion = nn.CrossEntropyLoss()
+
+    initial_loss = criterion(initial_preds, initial_target)
+    final_loss = criterion(final_preds, final_target)
+    tone_loss = criterion(tone_preds, tone_target)
 
     total_loss = (initial_loss * weights[0]) + (final_loss * weights[1]) + (tone_loss * weights[2])
     return total_loss
   
   def compute_accuracy(self, predictions, targets, average=True) -> int | Tuple[int, int, int]:
     initial_preds, final_preds, tone_preds = predictions
-    initial_target, final_target, tone_target = targets
+    initial_target, final_target, tone_target = targets[:, 0], targets[:, 1], targets[:, 2]
 
     initial_acc = self.initial_accuracy(initial_preds, initial_target)
     final_acc = self.final_accuracy(final_preds, final_target)
-    tone_acc = self.initial_accuracy(tone_preds, tone_target)
+    tone_acc = self.tones_accuracy(tone_preds, tone_target)
 
     if average:
       return (initial_acc + final_acc + tone_acc) / 3
@@ -95,11 +106,11 @@ class MTLNetwork(nn.Module):
   
   def compute_f1(self, predictions, targets, average=True) -> int | Tuple[int, int, int]:
     initial_preds, final_preds, tone_preds = predictions
-    initial_target, final_target, tone_target = targets
+    initial_target, final_target, tone_target = targets[:, 0], targets[:, 1], targets[:, 2]
 
     initial_f1 = self.initial_f1(initial_preds, initial_target)
     final_f1 = self.final_f1(final_preds, final_target)
-    tone_f1 = self.initial_f1(tone_preds, tone_target)
+    tone_f1 = self.tones_f1(tone_preds, tone_target)
 
     if average:
       return (initial_f1 + final_f1 + tone_f1) / 3

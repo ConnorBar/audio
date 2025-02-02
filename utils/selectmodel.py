@@ -11,7 +11,7 @@ def SelectModel(model: str, y_train: np.ndarray) -> MTLNetwork | ResNet18 | Chin
     num_finals = len(torch.unique(y_train[:, 1]))
     num_tones = len(torch.unique(y_train[:, 2]))
 
-    return MTLNetwork(num_initials=num_initials, num_finals=num_finals, num_tones=num_tones)
+    return MTLNetwork(feature_extractor=ResNet18(), num_initials=num_initials, num_finals=num_finals, num_tones=num_tones)
 
   elif model == "resnet":
     num_classes = len(torch.unique(y_train)) 

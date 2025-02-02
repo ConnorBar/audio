@@ -47,6 +47,8 @@ directory structure is mainly based on `constants.py` which can be modified.
   - essentially check both, mask the other one for only the valid combos of finals for initials, say its lukewarm prob its a match
   - check other way, mask the inits for only the possible ones based on the final, and say one of them is a much higher prob than the based predicted one then can essentially swap? the prediction to the higher prob one?
 - Test using some basic transformer architecture
+- got valid pinyin mappings from 
+  - https://yoyochinese.com/chinese-learning-tools/Mandarin-Chinese-pronunciation-lesson/pinyin-chart-table
 
 ### FEB 10TH DEADLINE (self imposed)
 - classify tone and pinyin for the inputted words
