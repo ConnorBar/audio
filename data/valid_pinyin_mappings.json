@@ -165,10 +165,10 @@
     "uen",
     "ueng",
     "uo",
-    "\u00fc",
-    "\u00fcan",
-    "\u00fce",
-    "\u00fcn"
+    "v",
+    "van",
+    "ve",
+    "vn"
   ],
   "b": [
     "a",
@@ -305,8 +305,8 @@
     "u",
     "uan",
     "uo",
-    "\u00fc",
-    "\u00fce"
+    "v",
+    "ve"
   ],
   "l": [
     "a",
@@ -332,8 +332,8 @@
     "uan",
     "uen",
     "uo",
-    "\u00fc",
-    "\u00fce"
+    "v",
+    "ve"
   ],
   "g": [
     "a",
@@ -408,10 +408,10 @@
     "ing",
     "iong",
     "iou",
-    "\u00fc",
-    "\u00fcan",
-    "\u00fce",
-    "\u00fcn"
+    "v",
+    "van",
+    "ve",
+    "vn"
   ],
   "q": [
     "i",
@@ -424,10 +424,10 @@
     "ing",
     "iong",
     "iou",
-    "\u00fc",
-    "\u00fcan",
-    "\u00fce",
-    "\u00fcn"
+    "v",
+    "van",
+    "ve",
+    "vn"
   ],
   "x": [
     "i",
@@ -440,9 +440,9 @@
     "ing",
     "iong",
     "iou",
-    "\u00fc",
-    "\u00fcan",
-    "\u00fce",
-    "\u00fcn"
+    "v",
+    "van",
+    "ve",
+    "vn"
   ]
 }
