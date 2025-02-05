@@ -10,18 +10,19 @@ import torch
 
 from utils.constants import *
 
-def generate_labels(df: pd.DataFrame) -> List[Tuple[int, int, int]]:
+def generate_labels(df: pd.DataFrame) -> List[Tuple[int, int, int, int]]:
   """encodes the labels & saves encoders to decode at prediction time
 
   Args:
       df (pd.DataFrame): pd df w labels
 
   Returns:
-      Tuple[List[int], List[int], List[int]]: tuple of all encoded labels
+      Tuple[List[int], List[int], List[int], List[int]]: tuple of initial, final, tone, sanity
   """
   initials = df['initial'].to_list()
   finals = df['final'].to_list()
   tones = df['tone'].to_list()
+  sanity = df['sanity'].to_list() # dont need an encoder, just binary classification
 
   initial_encoder = LabelEncoder()
   final_encoder = LabelEncoder()
@@ -36,11 +37,12 @@ def generate_labels(df: pd.DataFrame) -> List[Tuple[int, int, int]]:
   joblib.dump(final_encoder, PKL_DATA_DIR / "final_encoder.pkl")
   joblib.dump(tone_encoder, PKL_DATA_DIR / "tone_encoder.pkl")
 
-  labels = list(zip(initials_encoded, finals_encoded, tones_encoded))
+  # labels = list(zip(initials_encoded, finals_encoded, tones_encoded))
+  labels = list(zip(initials_encoded, finals_encoded, tones_encoded, sanity))
 
   return labels
   
-def assign_augmentations(X_train: List[str], y_train: Tuple[List[int], List[List[int]]], augments_needed: Dict[int, int]) -> List[Tuple[str, int, bool]]:  
+def assign_augmentations(X_train: List[str], y_train: Tuple[List[int], List[List[int]]], augments_needed: Dict[int, int]) -> List[Tuple[str, List[Tuple[int, int, int]], bool]]:  
   """ 
   resamples the req number to get target dist from each class and labels the resampled for augmentation
 

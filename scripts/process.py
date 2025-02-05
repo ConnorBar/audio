@@ -1,5 +1,3 @@
-
-
 """
 Proposed Pipeline:
   take dataset
@@ -29,37 +27,58 @@ Proposed Pipeline:
   validate - only a few extra bad exmaples but also can just use regular non-augmented ones
     
 """
+from multiprocessing import Pool
 import pandas as pd
-from pypinyin import lazy_pinyin, Style
+from sklearn.discriminant_analysis import StandardScaler
+from sklearn.model_selection import train_test_split
 from sklearn.utils import resample
 import re
 import json
 import numpy as np
 from sklearn.utils.class_weight import compute_class_weight
-from iterstrat.ml_stratifiers import MultilabelStratifiedShuffleSplit
+from tqdm import tqdm
 
+from utils.data_processing import breakdown_pinyin, is_valid_pinyin, proportional_sample, mark_augments
+from utils.augmentations import *
 from utils.constants import *
 
-valid_initials = ['EMPTY', 'b', 'p', 'm', 'f', 'd', 't', 'n', 'l', 'g', 'k', 'h', 'j',
-       'q', 'x', 'z', 'c', 's', 'zh', 'ch', 'sh', 'r']
+np.random.seed(RANDOM_SEED)
 
-valid_finals = ['i', 'a', 'ai', 'an', 'ang', 'ao', 'e', 'ei', 'en', 'eng', 'er', 'i', 'ia', 'ian', 'iang', 'iao', 'ie', 'in', 'ing', 'iong', 'iou', 'o', 'ong', 'ou', 'u', 'ua', 'uai', 'uan', 'uang', 'uei', 'uen', 'ueng', 'uo', 'v', 'van', 've', 'vn']
 
-def breakdown_pinyin_v_to_u(phrase):
-  clean_phrase = re.sub(r'[^\w]', '', phrase)
-  initial = lazy_pinyin(clean_phrase, style=Style.INITIALS, strict=True)
-  final = lazy_pinyin(clean_phrase, style=Style.FINALS, strict=True)
-  tone = [ word[-1] for word in lazy_pinyin(clean_phrase, style=Style.FINALS_TONE3, strict=False, v_to_u=True, neutral_tone_with_five=True, tone_sandhi=True)]
-  
-  initial = [init if init != '' else "EMPTY" for init in initial ]
+def feature_extraction(args) -> Tuple[List, List[Tuple[int, int, int, int]]]:
+  """is used in multiprocessing pipeline, takes in wav and returns extracted feature and its labels
 
-  return list(zip(initial, final, tone))
+  Args:
+      args (_type_): _description_
 
-def is_valid_pinyin(initial, final):
-    if initial not in valid_initials or final not in valid_finals:
-        return False
-    return True
-  
+  Returns:
+      Tuple[List, List[Tuple[int, int, int, int]]]: ( mfcc, (initial, final, tone, sanity) )
+  """
+  wav_file, labels, augment = args
+  try:
+    wav_path = LARGE_WAV_DIR / wav_file
+    
+    y, sr = librosa.load(wav_path, sr=None)
+    
+    # RAW AUDIO AUGMENTATION:
+    if augment:
+      y = augment_raw_audio(y, sr)
+    
+    # mfcc normalization 
+    # librosa.feature.melspectrogram(y=y)
+    mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
+    scaler = StandardScaler(with_mean=True, with_std=True)
+    mfcc_scaled = scaler.fit_transform(mfccs.T).T
+    
+    # ensure consistent shape - truncate or pad w 0s
+    mfcc_scaled = librosa.util.fix_length(mfcc_scaled, size=MAX_FRAMES, axis=1)
+    
+    return mfcc_scaled, labels
+    
+  except Exception as e:
+    print(f"Error processing {wav_file}: {e}")
+    return None, None  
+
 def main():
   df = pd.read_csv('./large-corpus/other.tsv', sep='\t')
 
@@ -67,23 +86,119 @@ def main():
 
   print('WIP - Segmenting sentences...')
 
+  # TODO SENTENCE SEGMENTATION - should only change how i handle the 'path' attribute
+
   print('Breaking down pinyin...')
-  df['pinyin_breakdown'] = df['sentence'].apply(breakdown_pinyin_v_to_u)
+  df['pinyin_breakdown'] = df['sentence'].apply(breakdown_pinyin)
+  df['character'] = df['sentence'].apply(lambda row: [char for char in re.sub(r'[^\w]', '', row)])
   
   print('Cleaning up...')
-  exploded = df.explode('pinyin_breakdown', ignore_index=True)
+  mask = df.apply(lambda row: len(row['character']) == len(row['pinyin_breakdown']), axis=1)
+  filtered_df = df[mask]
+
+  exploded = filtered_df.explode(['character', 'pinyin_breakdown'], ignore_index=True)
   exploded[['initial', 'final', 'tone']] = pd.DataFrame(exploded['pinyin_breakdown'].tolist(), index=exploded.index)
   exploded.drop(columns=['sentence', 'pinyin_breakdown'], inplace=True)
   mask = exploded.apply(lambda x: is_valid_pinyin(x['initial'], x['final'], x['tone']), axis=1)
 
   clean_df = exploded[mask]
-  print('Sampling data...')
 
+  print('Sampling data...')
+  sampled_data = proportional_sample(clean_df)
+  
+  # test train split
+  train_df, temp_df = train_test_split(sampled_data, test_size=0.2, stratify=sampled_data[['final']], random_state=42)
+  val_df, test_df = train_test_split(temp_df, test_size=0.5, stratify=temp_df[['final']], random_state=42)
+
+  train_df = mark_augments(train_df)
+
+  X_train, y_train, train_augs = train_df['path'].to_list(), generate_labels(train_df), train_df['augment']
+  X_val, y_val = val_df['path'].tolist(), generate_labels(val_df)
+  X_test, y_test = test_df['path'].tolist(), generate_labels(test_df)
+  
+  TESTING = True
+  
+  train_params = list(zip(X_train, y_train, train_augs))
+  test_params =  list(zip(X_test, y_test, [False] * len(X_test)))
+  val_params = list(zip(X_val, y_val, [False] * len(X_val))) 
+ 
+  output_data_dir = CUR_FEATS_DIR
+  if TESTING:
+    train_params = resample(list(train_params), n_samples=1000)
+    test_params = resample(test_params, n_samples=100)
+    test_params = resample(val_params, n_samples=100)
+    output_data_dir = TEST_DATA_DIR
+
+  # AUGMENTS - TRAIN feature extraction & pairing labels
+  total = len(train_params)
+  chunksize = max(1, total // (POOL_NUM * 10))  
+  with Pool(POOL_NUM) as p:
+    train_results = list(
+      tqdm(
+        p.imap(feature_extraction, train_params, chunksize=chunksize), 
+           total=total, 
+           desc="Train Feature Extraction"
+           )
+      )
+
+  train_results = [(feat, label) for feat, label in train_results if feat is not None]
+  train_features, train_label = zip(*train_results)
+
+  X_train_augmented = np.array(train_features)
+  y_train_augmented = np.array(train_label)
+  
+  # exporting now as a checkpoint
+  np.save(output_data_dir / 'train_features.npy', X_train_augmented)
+  np.save(output_data_dir / 'train_labels.npy', y_train_augmented)
+  print("Train features and labels saved in \'data\' directory...") 
 
   
+  # NO AUGMENTS - TEST feature extraction & pairing labels
+  total = len(test_params)
+  chunksize = max(1, total // (POOL_NUM * 10))  
+  with Pool(POOL_NUM) as p:
+    test_results = list(
+      tqdm(
+        p.imap(feature_extraction, test_params, chunksize=chunksize), 
+           total=total, 
+           desc="Test Feature Extraction"
+           )
+      )
 
+  test_results = [(feat, label) for feat, label in test_results if feat is not None]
+  test_features, test_labels = zip(*test_results)
 
+  X_test = np.array(test_features)
+  y_test = np.array(test_labels)
+  
+  # exporting all features & labels
+  np.save(output_data_dir / 'test_features.npy', X_test)
+  np.save(output_data_dir / 'test_labels.npy', y_test)
 
+  print("Test features and labels saved in \'data\' directory...") 
+
+  # NO AUGMENTS - VALIDATION feature extraction & pairing labels
+  total = len(val_params)
+  chunksize = max(1, total // (POOL_NUM * 10))  
+  with Pool(POOL_NUM) as p:
+    val_results = list(
+      tqdm(
+        p.imap(feature_extraction, val_params, chunksize=chunksize), 
+           total=total, 
+           desc="Test Feature Extraction"
+           )
+      )
+
+  val_results = [(feat, label) for feat, label in val_results if feat is not None]
+  val_features, val_labels = zip(*val_results)
+
+  X_val = np.array(val_features)
+  y_val = np.array(val_labels)
+  
+  # exporting all features & labels
+  np.save(output_data_dir / 'val_features.npy', X_val)
+  np.save(output_data_dir / 'val_labels.npy', y_val)
+  print("Validation features and labels saved in \'data\' directory...")
   
   
   return
@@ -91,82 +206,3 @@ def main():
   
 if __name__ == '__main__':
   main()
-
-  
-  
-def better_sample(df: pd.DataFrame):
-
-
-  
-  
-  return
-  
-
-def sample_data(df, sample_size=10000, min_size=30000, max_size=150000, sampling_diff_slack=0.05):
-  original = df.copy()
-  dataset = pd.DataFrame(columns=df.columns)
-  
-  og_initial_dist = df['initial'].value_counts(normalize=True)
-  og_final_dist = df['final'].value_counts(normalize=True)
-  og_tone_dist = df['tone'].value_counts(normalize=True)
-
-  min_init_values = og_initial_dist * min_size
-  min_final_values = og_final_dist * min_size
-  min_tone_values = og_tone_dist * min_size
-
-
-  while len(dataset) < max_size:
-    # want to do some sort of distribution balancing here, but also want to take into account some are more common than others
-    test = resample(original, replace=True, n_samples=sample_size, random_state=RANDOM_SEED)
-    dataset = pd.concat([dataset, test])
-
-    # checking the distributions
-    initials = dataset['initial'].value_counts()
-    finals = dataset['final'].value_counts()
-    tones = dataset['tone'].value_counts()
-
-    cur_initial_dist = initials / len(dataset['initial'])
-    cur_final_dist = finals / len(dataset['final'])
-    cur_tone_dist = tones / len(dataset['tone'])
-
-    has_all_classes = set(initials.index) >= set(og_initial_dist.index) \
-                      and set(finals.index) >= set(og_final_dist.index) \
-                      and set(tones.index) >= set(og_tone_dist.index)
-
-    initial_is_prop = (abs(1 - cur_initial_dist / og_initial_dist ) > sampling_diff_slack).all()
-    final_is_prop = (abs(1 - cur_final_dist / og_final_dist ) > sampling_diff_slack).all()
-    tone_is_prop = (abs(1 - cur_tone_dist / og_tone_dist ) > sampling_diff_slack).all()
-
-
-    if has_all_classes and initial_is_prop and final_is_prop and tone_is_prop:
-      break
-
-  # RESAMPLE RARE & MARK FOR AUGMENTATION
-  rare_classes = (initials < min_init_values) | (finals < min_final_values) | (tones < min_tone_values)
-  rare_samples = original[original['initial'].isin(rare_classes[rare_classes].index) |
-                          original['final'].isin(rare_classes[rare_classes].index) |
-                          original['tone'].isin(rare_classes[rare_classes].index)]
-  dataset['augment'] = 0
-
-  if not rare_samples.empty:
-      augmented_samples = resample(rare_samples, replace=True, n_samples=len(rare_samples) * 2, random_state=RANDOM_SEED)
-      augmented_samples['augment'] = 1
-      dataset = pd.concat([dataset, augmented_samples])
-    
-  # SAMPLE AND MAKE INSANE ONES
-  dataset['sanity'] = 1
-  sanity_proportion = 0.2 * len(dataset)
-
-  insane = resample(dataset, replace=True, n_samples=sanity_proportion, random_state=RANDOM_SEED)
-  insane['augment'] = 1
-  insane['sanity'] = 0
-
-  with open(DATA_DIR / 'invalid_initial_final_mappings.json', 'r') as file:
-    invalid_mappings = json.load(file)
-  
-  np.random.seed(RANDOM_SEED)
-  insane.apply(lambda row: np.random.choice(invalid_mappings[row['initial']]) if row['initial'] in invalid_mappings else None, axis=1)
-
-  dataset = pd.concat([dataset, insane])
-
-  return dataset

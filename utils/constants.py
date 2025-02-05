@@ -13,6 +13,7 @@ MODELS_DIR = BASE_DIR / 'models'
 RESULTS_PATH = DATA_DIR / 'result.csv'
 LARGE_WAV_DIR = BASE_DIR / 'DANGER' / 'large-wav'
 LARGE_MP3_DIR = BASE_DIR / 'large-corpus' / 'clips'
+LARGE_16K_DIR = BASE_DIR / 'large-corpus' / 'clips16k'
 
 POOL_NUM = os.cpu_count() - 2
 
