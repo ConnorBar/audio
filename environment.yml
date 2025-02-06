@@ -1,4 +1,4 @@
-name: sound
+name: audio
 channels:
   - anaconda
   - pytorch

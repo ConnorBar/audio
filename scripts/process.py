@@ -86,7 +86,7 @@ def main():
 
   print('WIP - Segmenting sentences...')
 
-  # TODO SENTENCE SEGMENTATION - should only change how i handle the 'path' attribute
+  # TODO SENTENCE SEGMENTATION 
 
   print('Breaking down pinyin...')
   df['pinyin_breakdown'] = df['sentence'].apply(breakdown_pinyin)
