@@ -1,0 +1,19 @@
+name: sound
+channels:
+  - defaults
+dependencies:
+  - python=3.11
+  - conda-forge::librosa
+  - ipykernel
+  - matplotlib
+  - pandas
+  - pytorch::pytorch
+  - torchaudio
+  - torchvision
+  - anaconda::seaborn
+  - conda-forge::pydub
+  - tqdm
+  - lightning
+  - tensorboard
+  - ipywidgets
+prefix: /Users/connorbarnsley/anaconda3/envs/sound
