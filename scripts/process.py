@@ -1,9 +1,6 @@
 """
 Proposed Pipeline:
-  take dataset
-  
-  explode it into the 8mil examples based on pinyin
-    - need to add sentence segmentation later to
+  given segmented sentences, clean anything up
   
   filter out all bad info - Esmond, SatanI etc
   
@@ -27,95 +24,76 @@ Proposed Pipeline:
   validate - only a few extra bad exmaples but also can just use regular non-augmented ones
     
 """
+import ast
 from multiprocessing import Pool
 import pandas as pd
-from sklearn.discriminant_analysis import StandardScaler
+from pypinyin import lazy_pinyin
 from sklearn.model_selection import train_test_split
 from sklearn.utils import resample
 import re
 import json
 import numpy as np
-from sklearn.utils.class_weight import compute_class_weight
 from tqdm import tqdm
 
-from utils.data_processing import breakdown_pinyin, is_valid_pinyin, proportional_sample, mark_augments
+import utils.data_processing as dp
+from utils.data_processing import breakdown_pinyin, is_valid_pinyin, proportional_sample, mark_augments, feature_extraction, split_chinese_non_chinese
 from utils.augmentations import *
 from utils.constants import *
 
+
 np.random.seed(RANDOM_SEED)
 
-
-def feature_extraction(args) -> Tuple[List, List[Tuple[int, int, int, int]]]:
-  """is used in multiprocessing pipeline, takes in wav and returns extracted feature and its labels
-
-  Args:
-      args (_type_): _description_
-
-  Returns:
-      Tuple[List, List[Tuple[int, int, int, int]]]: ( mfcc, (initial, final, tone, sanity) )
-  """
-  wav_file, labels, augment = args
-  try:
-    wav_path = LARGE_WAV_DIR / wav_file
-    
-    y, sr = librosa.load(wav_path, sr=None)
-    
-    # RAW AUDIO AUGMENTATION:
-    if augment:
-      y = augment_raw_audio(y, sr)
-    
-    # mfcc normalization 
-    # librosa.feature.melspectrogram(y=y)
-    mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
-    scaler = StandardScaler(with_mean=True, with_std=True)
-    mfcc_scaled = scaler.fit_transform(mfccs.T).T
-    
-    # ensure consistent shape - truncate or pad w 0s
-    mfcc_scaled = librosa.util.fix_length(mfcc_scaled, size=MAX_FRAMES, axis=1)
-    
-    return mfcc_scaled, labels
-    
-  except Exception as e:
-    print(f"Error processing {wav_file}: {e}")
-    return None, None  
-
 def main():
-  df = pd.read_csv('./large-corpus/other.tsv', sep='\t')
 
-  df = df[['path', 'sentence', 'age', 'gender', 'accents']]
+  # ------------Data Cleaning----------------------- #
 
-  print('WIP - Segmenting sentences...')
+  print('Reading in data and cleaning...')
+  df = pd.read_csv(DATA_DIR / 'metadata.csv')
 
-  # TODO SENTENCE SEGMENTATION 
+  tqdm.pandas(desc="Converting to paths to list")
+  df['word_files'] = df['word_files'].progress_apply(ast.literal_eval)
+  tqdm.pandas(desc="Breaking down pinyin")
+  df['pinyin_breakdown'] = df['sentence'].progress_apply(breakdown_pinyin)
+  tqdm.pandas(desc="Cleaning Pinyin")
+  df['pinyin'] = df['sentence'].progress_apply(lambda row: dp.clean_pinyin(lazy_pinyin(row)))
+  tqdm.pandas(desc="Removing non-chinese characters")
+  df['character'] = df['sentence'].progress_apply(split_chinese_non_chinese)
 
-  print('Breaking down pinyin...')
-  df['pinyin_breakdown'] = df['sentence'].apply(breakdown_pinyin)
-  df['character'] = df['sentence'].apply(lambda row: [char for char in re.sub(r'[^\w]', '', row)])
+  tqdm.pandas(desc="Checking even lengths")
+  valid_lengths = df.progress_apply(lambda row: len({
+    len(row['word_files']), 
+    len(row['pinyin_breakdown']), 
+    len(row['pinyin']), 
+    len(row['character'])
+    }) == 1, axis=1)
+  df = df[valid_lengths]
   
-  print('Cleaning up...')
-  mask = df.apply(lambda row: len(row['character']) == len(row['pinyin_breakdown']), axis=1)
-  filtered_df = df[mask]
-
-  exploded = filtered_df.explode(['character', 'pinyin_breakdown'], ignore_index=True)
+  exploded = df.explode(['word_files', 'pinyin_breakdown', 'pinyin', 'character'], ignore_index=True)
   exploded[['initial', 'final', 'tone']] = pd.DataFrame(exploded['pinyin_breakdown'].tolist(), index=exploded.index)
-  exploded.drop(columns=['sentence', 'pinyin_breakdown'], inplace=True)
-  mask = exploded.apply(lambda x: is_valid_pinyin(x['initial'], x['final'], x['tone']), axis=1)
+  exploded.drop(columns=['pinyin_breakdown'], inplace=True)
 
-  clean_df = exploded[mask]
+  tqdm.pandas(desc="Ensuring valid pinyin")
+  valid_chinese_mask = exploded.progress_apply(lambda x: is_valid_pinyin(x['initial'], x['final']), axis=1)
+  clean_df = exploded[valid_chinese_mask]
+  tqdm.pandas(desc="Processing data")
+
+  # -----------Sampling and Splitting------------------------ #
 
   print('Sampling data...')
   sampled_data = proportional_sample(clean_df)
   
   # test train split
-  train_df, temp_df = train_test_split(sampled_data, test_size=0.2, stratify=sampled_data[['final']], random_state=42)
-  val_df, test_df = train_test_split(temp_df, test_size=0.5, stratify=temp_df[['final']], random_state=42)
+  train_df, temp_df = train_test_split(sampled_data, test_size=0.2, stratify=sampled_data[['final']], random_state=RANDOM_SEED)
+  val_df, test_df = train_test_split(temp_df, test_size=0.5, stratify=temp_df[['final']], random_state=RANDOM_SEED)
 
   train_df = mark_augments(train_df)
 
-  X_train, y_train, train_augs = train_df['path'].to_list(), generate_labels(train_df), train_df['augment']
-  X_val, y_val = val_df['path'].tolist(), generate_labels(val_df)
-  X_test, y_test = test_df['path'].tolist(), generate_labels(test_df)
+  X_train, y_train, train_augs = train_df['word_files'].to_list(), generate_labels(train_df), train_df['augment']
+  X_val, y_val = val_df['word_files'].tolist(), generate_labels(val_df)
+  X_test, y_test = test_df['word_files'].tolist(), generate_labels(test_df)
   
+  # ------------Params setup----------------------- #
+
   TESTING = True
   
   train_params = list(zip(X_train, y_train, train_augs))
@@ -129,9 +107,11 @@ def main():
     test_params = resample(val_params, n_samples=100)
     output_data_dir = TEST_DATA_DIR
 
+  # ----------Train extractions------------------------- #
+
   # AUGMENTS - TRAIN feature extraction & pairing labels
   total = len(train_params)
-  chunksize = max(1, total // (POOL_NUM * 10))  
+  chunksize = max(1, total // (POOL_NUM * 2))  
   with Pool(POOL_NUM) as p:
     train_results = list(
       tqdm(
@@ -152,10 +132,11 @@ def main():
   np.save(output_data_dir / 'train_labels.npy', y_train_augmented)
   print("Train features and labels saved in \'data\' directory...") 
 
+  # -----------Test Extractions------------------------ #
   
   # NO AUGMENTS - TEST feature extraction & pairing labels
   total = len(test_params)
-  chunksize = max(1, total // (POOL_NUM * 10))  
+  chunksize = max(1, total // (POOL_NUM * 2))  
   with Pool(POOL_NUM) as p:
     test_results = list(
       tqdm(
@@ -177,9 +158,11 @@ def main():
 
   print("Test features and labels saved in \'data\' directory...") 
 
+  # -----------Validation Extractions----------------------- #
+
   # NO AUGMENTS - VALIDATION feature extraction & pairing labels
   total = len(val_params)
-  chunksize = max(1, total // (POOL_NUM * 10))  
+  chunksize = max(1, total // (POOL_NUM * 2))  
   with Pool(POOL_NUM) as p:
     val_results = list(
       tqdm(
@@ -199,9 +182,6 @@ def main():
   np.save(output_data_dir / 'val_features.npy', X_val)
   np.save(output_data_dir / 'val_labels.npy', y_val)
   print("Validation features and labels saved in \'data\' directory...")
-  
-  
-  return
   
   
 if __name__ == '__main__':

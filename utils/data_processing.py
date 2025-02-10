@@ -1,13 +1,18 @@
 import re
 import json
+import librosa
+import torch
+import torchaudio
 import numpy as np
 import pandas as pd
+from typing import List, Tuple
 
 from pypinyin import Style, lazy_pinyin
 from sklearn.utils import resample
-from sklearn.utils import resample
 from sklearn.utils.class_weight import compute_class_weight
+from sklearn.discriminant_analysis import StandardScaler
 
+from utils.augmentations import augment_raw_audio
 from utils.constants import *
 
 valid_initials = ['EMPTY', 'b', 'p', 'm', 'f', 'd', 't', 'n', 'l', 'g', 'k', 'h', 'j',
@@ -31,8 +36,34 @@ def is_valid_pinyin(initial, final):
         return False
     return True
 
+def split_chinese_non_chinese(text):
+    # Regular expression to match Chinese characters
+    chinese_pattern = re.compile(r'[\u4e00-\u9fff]')
+    
+    result = []
+    buffer = ""  # Buffer to collect non-Chinese characters
 
-def proportional_sample(df: pd.DataFrame):
+    for char in text:
+        if chinese_pattern.match(char):  
+            if buffer:
+                result.append(buffer)  # Append the previous non-Chinese sequence
+                buffer = ""  # Reset buffer
+            result.append(char)  # Append the Chinese character itself
+        else:
+            buffer += char  # Group non-Chinese characters together
+    
+    if buffer:
+        result.append(buffer)  # Append any remaining non-Chinese characters
+    
+    return result
+valid_pinyin = set("abcdefghijklmnopqrstuvwxyz")  # Allowed characters
+
+def clean_pinyin(pinyin_list):
+  return [''.join(c for c in word if c in valid_pinyin) for word in pinyin_list]
+
+
+
+def proportional_sample(df: pd.DataFrame, n_samples=500_000):
   clean_df = df.copy()
   for label in ['initial', 'final']:
     unique_classes = np.unique(clean_df[label])
@@ -43,10 +74,10 @@ def proportional_sample(df: pd.DataFrame):
   clean_df["sample_weight"] = clean_df[['initial_weight', 'final_weight']].mean(axis=1)
 
   # Sample using computed weights
-  sampled_df = clean_df.sample(n=500_000, weights=clean_df["sample_weight"], random_state=42)
+  sampled_df = clean_df.sample(n=n_samples, weights=clean_df["sample_weight"], random_state=RANDOM_SEED)
   
   # drop some cols
-  sampled_df.drop(columns=['pinyin_breakdown', 'initial_weight', 'final_weight', 'sample_weight'], inplace=True)
+  sampled_df.drop(columns=['initial_weight', 'final_weight', 'sample_weight'], inplace=True)
   sampled_df['sanity'] = 1
   sampled_df['augment'] = 0
 
@@ -88,3 +119,38 @@ def mark_augments(df: pd.DataFrame, sample_frac=0.7, augment_frac=0.2, insane_fr
   done = done.sample(frac=1, random_state=RANDOM_SEED).reset_index(drop=True)
 
   return done
+
+def feature_extraction(args) -> Tuple[List, List[Tuple[int, int, int, int]]]:
+  """is used in multiprocessing pipeline, takes in wav and returns extracted feature and its labels
+
+  Args:
+      args (_type_): _description_
+
+  Returns:
+      Tuple[List, List[Tuple[int, int, int, int]]]: ( mfcc, (initial, final, tone, sanity) )
+  """
+  wav_file, labels, augment = args
+  try:
+    wav_path = LARGE_WAV_DIR / wav_file
+    
+    y, sr = librosa.load(wav_path, sr=None)
+    y, sr = librosa.load(wav_path, sr=None)
+    
+    # RAW AUDIO AUGMENTATION:
+    if augment:
+      y = augment_raw_audio(y, sr)
+    
+    # mfcc normalization 
+    # librosa.feature.melspectrogram(y=y)
+    mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
+    scaler = StandardScaler(with_mean=True, with_std=True)
+    mfcc_scaled = scaler.fit_transform(mfccs.T).T
+    
+    # ensure consistent shape - truncate or pad w 0s
+    mfcc_scaled = librosa.util.fix_length(mfcc_scaled, size=MAX_FRAMES, axis=1)
+    
+    return mfcc_scaled, labels
+    
+  except Exception as e:
+    print(f"Error processing {wav_file}: {e}")
+    return None, None  

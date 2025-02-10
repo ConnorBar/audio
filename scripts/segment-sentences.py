@@ -1,11 +1,14 @@
 import re
 import json
+import sys
+from pypinyin import lazy_pinyin
 import torch
 import torchaudio
 import librosa
 import numpy as np
 import pandas as pd
 import multiprocessing as mp
+import jieba
 
 import cProfile
 import pstats
@@ -14,14 +17,13 @@ from tqdm import tqdm
 from typing import List
 from torchaudio import transforms as T
 from torchaudio.pipelines import MMS_FA as bundle
-from multiprocessing import Pool, cpu_count
 
 from utils.constants import *
-from utils.selectmodel import GetDevice
 
 import os
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True,max_split_size_mb:128"  # Reduces fragmentation[27][30]
 
+torch.cuda.synchronize()
 
 # ------------------------------------------------ #
 
@@ -35,7 +37,7 @@ aligner = bundle.get_aligner()
 def compute_alignments(waveform: torch.Tensor, transcript: List[str]):
   with torch.inference_mode():
     emission, _ = model(waveform.to(device))
-    token_spans = aligner(emission[0], transcript)
+    token_spans = aligner(emission[0], tokenizer(transcript))
   return emission, token_spans
 
 def get_words(waveform, spans, num_frames):
@@ -68,40 +70,51 @@ def driver(args):
 
     return word_filenames, sentence
 
-  except RuntimeError as e:
+  except Exception as e:
     if "targets length is too long for CTC" in str(e):
-      print(f"Alignment failed for {path}: {e}")
+      error_message = f"Alignment failed for {path}: {e}\n"
+      sys.stderr.write(error_message)  # Print to stderr to avoid tqdm interference
+      sys.stderr.flush()  # Ensure immediate writing to stderr
+
     else:
-      print(f"Unexpected error in {path}: {e}")
+      sys.stderr.write(f"something else went wrong: {e}")  # Print to stderr to avoid tqdm interference
+      sys.stderr.flush()  # Ensure immediate writing to stderr
 
     return None  # Ensures the pipeline doesn’t crash
 
 # ------------------------------------------------ #
 
 def main():
-
-  df = pd.read_csv('./large-corpus/prepped.csv', memory_map=True)
+  print('Reading in dataframe and cleaning...')
+  df = pd.read_csv('./large-corpus/validated.tsv', sep='\t', memory_map=True)
   # df = df[:100]  # debugging size
-  df['transcript'] = df['transcript'].apply(json.loads)
-  df['sentence'] = df['sentence'].apply(lambda row: re.sub(r'[^\w]', '', row))
+  df['sentence'] = df['sentence'].apply(lambda row: re.sub(r'[^\w]', '', row)) 
+
+  valid_pinyin = set("abcdefghijklmnopqrstuvwxyz")  # Allowed characters
+
+  def clean_pinyin(pinyin_list):
+    return [''.join(c for c in word if c in valid_pinyin) for word in pinyin_list]
+
+  df['transcript'] = df['sentence'].apply(lambda row: clean_pinyin(lazy_pinyin(row)))
+
 
   params = df[['path', 'transcript', 'sentence']].to_records(index=False).tolist()
   
-  total = len(df)
-  pool_size = min(cpu_count(), 5) 
-  chunksize = max(1, total // (pool_size * 2))
+  # total = len(df)
+  # pool_size = min(cpu_count(), 5) 
+  # chunksize = max(1, total // (pool_size * 2))
 
-    
-  with Pool(pool_size) as p:
-    segmentations = list(
-      tqdm(
-        p.imap(driver, params, chunksize=chunksize), 
-           total=total, 
-           desc="Sentence Segmentation"
-           )
-      )
+  # with Pool(pool_size) as p:
+  #   segmentations = list(
+  #     tqdm(
+  #       p.imap_unordered(driver, params, chunksize=chunksize), 
+  #          total=total, 
+  #          desc="Sentence Segmentation"
+  #          )
+  #     )
+  #   sys.stdout.flush()  
 
-  # segmentations = [driver(param) for param in params ]
+  segmentations = [driver(param) for param in tqdm(params) ]
   segmentations = [s for s in segmentations if s is not None]
 
   
