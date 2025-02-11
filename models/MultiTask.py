@@ -107,33 +107,3 @@ class MTLNetwork(nn.Module):
       return sum(computed_metrics) / len(computed_metrics)
 
     return tuple(computed_metrics) 
-      
-  # ------------------------------------------ #
-  
-  def compute_accuracy(self, predictions, targets, average=True) -> int | Tuple[int, int, int]:
-    initial_preds, final_preds, tone_preds, sanity_preds = predictions
-    initial_target, final_target, tone_target, sanity_target = targets[:, 0], targets[:, 1], targets[:, 2], targets[:, 3]
-
-    initial_acc = self.initial_accuracy(initial_preds, initial_target)
-    final_acc = self.final_accuracy(final_preds, final_target)
-    tone_acc = self.tones_accuracy(tone_preds, tone_target)
-    sanity_acc = self.sanity_accuracy(sanity_preds, sanity_target)
-
-    if average:
-      return (initial_acc + final_acc + tone_acc + sanity_acc) / 4
-
-    return initial_acc, final_acc, tone_acc, sanity_acc
-  
-  def compute_f1(self, predictions, targets, average=True) -> int | Tuple[int, int, int, int]:
-
-    target_list = [targets[:, i] for i in range(targets.shape[1])]
-
-    computed_metrics = []
-    for prediction, target, metric in zip(predictions, target_list, self.f1_metrics):
-      computed_metrics.append(metric(prediction, target))
-
-    if average:
-      return sum(computed_metrics) / len(computed_metrics)
-
-    return tuple(computed_metrics) 
-      
