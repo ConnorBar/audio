@@ -1,11 +1,10 @@
-from multiprocessing import pool
-from typing import Tuple
+from typing import List, Literal, Tuple, Union
 import torch
 import torch.nn as nn
 from torchmetrics import Accuracy, F1Score, CharErrorRate
 
 class MTLNetwork(nn.Module):
-  def __init__(self, feature_extractor, num_initials=10, num_finals=8, num_tones=5, lstm_hidden_dim=256, hard_param_sharing=True):
+  def __init__(self, feature_extractor, num_initials, num_finals, num_tones, lstm_hidden_dim=256, hard_param_sharing=True):
     super(MTLNetwork, self).__init__()
     
     # remove the last two layers of resnet (AdaptiveAvgPool2d and Linear)
@@ -25,8 +24,6 @@ class MTLNetwork(nn.Module):
     self.initial_head = nn.Linear(256 * 2, num_initials)
     self.final_head = nn.Linear(256 * 2, num_finals)
     self.tone_head = nn.Linear(256 * 2, num_tones)
-
-    # going to add
     self.sanity_head = nn.Linear(256 * 2, 2) # sane or insane
     
     self.num_initials = num_initials
@@ -42,6 +39,12 @@ class MTLNetwork(nn.Module):
 
     self.tones_accuracy = Accuracy(task="multiclass", num_classes=num_tones)
     self.tones_f1 = F1Score(task="multiclass", num_classes=num_tones)
+
+    self.sanity_accuracy = Accuracy(task="binary")
+    self.sanity_f1 = F1Score(task="binary")
+
+    self.accuracy_metrics = [self.initial_accuracy, self.final_accuracy, self.tones_accuracy, self.sanity_accuracy]
+    self.f1_metrics = [self.initial_f1, self.final_f1, self.tones_f1, self.sanity_f1]
   
   def forward(self, x):
     """
@@ -70,49 +73,67 @@ class MTLNetwork(nn.Module):
     initials_out = self.initial_head(pooled_features)
     finals_out = self.final_head(pooled_features)
     tones_out = self.tone_head(pooled_features)
-
     sanity_out = self.tone_head(pooled_features)
 
     # TODO add masking to make certain combos not possible!!
     
-    return initials_out, finals_out, tones_out
+    return initials_out, finals_out, tones_out, sanity_out
 
-  # TODO consider uncertainty-based weighting, where the loss weights are also learned dynamically
-  def compute_loss(self, predictions, targets, weights=[1.0, 1.0, 1.0]):
-    initial_preds, final_preds, tone_preds = predictions
-    initial_target, final_target, tone_target = targets[:, 0], targets[:, 1], targets[:, 2]
+  # TODO might consider uncertainty-based weighting, where the loss weights are also learned dynamically
+  def compute_loss(self, predictions, targets, criterion=nn.CrossEntropyLoss(), weights: List=None) -> float:
+    if weights is None:
+      weights = [1.0] * len(predictions)
 
-    criterion = nn.CrossEntropyLoss()
+    target_list = [targets[:, i]for i in range(targets.shape[1])]
 
-    initial_loss = criterion(initial_preds, initial_target)
-    final_loss = criterion(final_preds, final_target)
-    tone_loss = criterion(tone_preds, tone_target)
+    total_loss = 0
+    for pred, target, weight in zip(predictions, target_list, weights):
+      loss = criterion(pred, target)
+      total_loss += loss * weight
 
-    total_loss = (initial_loss * weights[0]) + (final_loss * weights[1]) + (tone_loss * weights[2])
     return total_loss
+
+  def compute_metrics(self, predictions, targets, metric: Literal["f1", "acc"], average: bool=True) -> Union[float | Tuple[float, float, float, float]]:
+    assert metric in ['f1', 'acc']
+    target_list = [targets[:, i] for i in range(targets.shape[1])]
+
+    metrics = self.f1_metrics if metric == "f1" else self.accuracy_metrics
+
+    computed_metrics = []
+    for prediction, target, evaluator in zip(predictions, target_list, metrics):
+      computed_metrics.append(evaluator(prediction, target))
+
+    if average:
+      return sum(computed_metrics) / len(computed_metrics)
+
+    return tuple(computed_metrics) 
+      
+  # ------------------------------------------ #
   
   def compute_accuracy(self, predictions, targets, average=True) -> int | Tuple[int, int, int]:
-    initial_preds, final_preds, tone_preds = predictions
-    initial_target, final_target, tone_target = targets[:, 0], targets[:, 1], targets[:, 2]
+    initial_preds, final_preds, tone_preds, sanity_preds = predictions
+    initial_target, final_target, tone_target, sanity_target = targets[:, 0], targets[:, 1], targets[:, 2], targets[:, 3]
 
     initial_acc = self.initial_accuracy(initial_preds, initial_target)
     final_acc = self.final_accuracy(final_preds, final_target)
     tone_acc = self.tones_accuracy(tone_preds, tone_target)
+    sanity_acc = self.sanity_accuracy(sanity_preds, sanity_target)
 
     if average:
-      return (initial_acc + final_acc + tone_acc) / 3
+      return (initial_acc + final_acc + tone_acc + sanity_acc) / 4
 
-    return initial_acc, final_acc, tone_acc
+    return initial_acc, final_acc, tone_acc, sanity_acc
   
-  def compute_f1(self, predictions, targets, average=True) -> int | Tuple[int, int, int]:
-    initial_preds, final_preds, tone_preds = predictions
-    initial_target, final_target, tone_target = targets[:, 0], targets[:, 1], targets[:, 2]
+  def compute_f1(self, predictions, targets, average=True) -> int | Tuple[int, int, int, int]:
 
-    initial_f1 = self.initial_f1(initial_preds, initial_target)
-    final_f1 = self.final_f1(final_preds, final_target)
-    tone_f1 = self.tones_f1(tone_preds, tone_target)
+    target_list = [targets[:, i] for i in range(targets.shape[1])]
+
+    computed_metrics = []
+    for prediction, target, metric in zip(predictions, target_list, self.f1_metrics):
+      computed_metrics.append(metric(prediction, target))
 
     if average:
-      return (initial_f1 + final_f1 + tone_f1) / 3
+      return sum(computed_metrics) / len(computed_metrics)
 
-    return initial_f1, final_f1, tone_f1
+    return tuple(computed_metrics) 
+      

@@ -6,6 +6,8 @@ import torchaudio
 import numpy as np
 import pandas as pd
 from typing import List, Tuple
+import torch.nn.functional as F
+import torchaudio.transforms as T
 
 from pypinyin import Style, lazy_pinyin
 from sklearn.utils import resample
@@ -14,12 +16,14 @@ from sklearn.discriminant_analysis import StandardScaler
 
 from utils.augmentations import augment_raw_audio
 from utils.constants import *
+from utils.selectmodel import GetDevice
 
 valid_initials = ['EMPTY', 'b', 'p', 'm', 'f', 'd', 't', 'n', 'l', 'g', 'k', 'h', 'j',
        'q', 'x', 'z', 'c', 's', 'zh', 'ch', 'sh', 'r']
 
 valid_finals = ['i', 'a', 'ai', 'an', 'ang', 'ao', 'e', 'ei', 'en', 'eng', 'er', 'i', 'ia', 'ian', 'iang', 'iao', 'ie', 'in', 'ing', 'iong', 'iou', 'o', 'ong', 'ou', 'u', 'ua', 'uai', 'uan', 'uang', 'uei', 'uen', 'ueng', 'uo', 'v', 'van', 've', 'vn']
 
+device = GetDevice()
 
 def breakdown_pinyin(phrase):
   clean_phrase = re.sub(r'[^\w]', '', phrase)
@@ -60,7 +64,6 @@ valid_pinyin = set("abcdefghijklmnopqrstuvwxyz")  # Allowed characters
 
 def clean_pinyin(pinyin_list):
   return [''.join(c for c in word if c in valid_pinyin) for word in pinyin_list]
-
 
 
 def proportional_sample(df: pd.DataFrame, n_samples=500_000):
@@ -120,8 +123,10 @@ def mark_augments(df: pd.DataFrame, sample_frac=0.7, augment_frac=0.2, insane_fr
 
   return done
 
+# ------------------------------------------- #
+
 def feature_extraction(args) -> Tuple[List, List[Tuple[int, int, int, int]]]:
-  """is used in multiprocessing pipeline, takes in wav and returns extracted feature and its labels
+  """ takes in wav and returns extracted feature and its labels
 
   Args:
       args (_type_): _description_
@@ -129,28 +134,83 @@ def feature_extraction(args) -> Tuple[List, List[Tuple[int, int, int, int]]]:
   Returns:
       Tuple[List, List[Tuple[int, int, int, int]]]: ( mfcc, (initial, final, tone, sanity) )
   """
+  TARGET_LENGTH = 16000  # 1 second @16kHz
+  N_FFT = 512           # 32ms window
+  HOP_LENGTH = 160      # 10ms stride
+  MAX_FRAMES = (TARGET_LENGTH - N_FFT) // HOP_LENGTH + 1  # 96 frames
+
   wav_file, labels, augment = args
   try:
-    wav_path = LARGE_WAV_DIR / wav_file
-    
-    y, sr = librosa.load(wav_path, sr=None)
-    y, sr = librosa.load(wav_path, sr=None)
-    
+    waveform = torch.load(LARGE_WAV_DIR / wav_file, weights_only=True).to(device)
+
+    if waveform.size(0) > TARGET_LENGTH:
+      waveform = waveform[:TARGET_LENGTH]
+    else:
+      waveform = torch.nn.functional.pad(waveform, (0, TARGET_LENGTH - waveform.size(0)))
+
     # RAW AUDIO AUGMENTATION:
     if augment:
-      y = augment_raw_audio(y, sr)
+      waveform = augment_raw_audio(waveform)
+
+    # Update MFCC transform
+    mfcc_transform = torchaudio.transforms.MFCC(
+    sample_rate=16000,
+    n_mfcc=13,
+    melkwargs={
+        'n_fft': N_FFT,
+        'hop_length': HOP_LENGTH,
+        'n_mels': 40,        # Standard for speech
+        'center': True,      # Avoid padding artifacts
+    }).to(device)
+
+    # print("BEFORE TRANS dims: ", waveform.shape)
+    mfccs = mfcc_transform(waveform).squeeze(0)
+    # print("AFTER TRANS dims: ", mfccs.shape)
+    # Normalize features
+    mean = mfccs.mean(dim=1, keepdim=True)
+    std = mfccs.std(dim=1, keepdim=True)
+    mfccs = (mfccs - mean) / (std + 1e-8)
+
+    # Ensure fixed length (padding or truncating)
+    if mfccs.shape[1] < MAX_FRAMES:
+      mfccs = F.pad(mfccs, (0, MAX_FRAMES - mfccs.shape[1]))  # Ensure padding
+    else:
+      mfccs = mfccs[:, :MAX_FRAMES]
+    # print("FINAL dims: ", mfccs.shape)
+    return mfccs, labels
+ 
+    # RAW AUDIO AUGMENTATION:
+    if augment:
+      waveform = augment_raw_audio(waveform)
+    # waveform = waveform.to(device)
     
     # mfcc normalization 
-    # librosa.feature.melspectrogram(y=y)
-    mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
-    scaler = StandardScaler(with_mean=True, with_std=True)
-    mfcc_scaled = scaler.fit_transform(mfccs.T).T
-    
-    # ensure consistent shape - truncate or pad w 0s
-    mfcc_scaled = librosa.util.fix_length(mfcc_scaled, size=MAX_FRAMES, axis=1)
-    
-    return mfcc_scaled, labels
-    
+    mfcc_transform = T.MFCC(
+        sample_rate=16000,
+        n_mfcc=13,
+        melkwargs={
+            'n_mels': 40,
+            'n_fft': 512,
+            'hop_length': 160,
+            'win_length': 400
+        }
+    )
+    mfcc_tensor = mfcc_transform(waveform)  # Shape: [1, 13, time]
+    mfcc_tensor = mfcc_tensor.squeeze(0)  # Shape: [13, time]
+
+    # use gpu for scaling instead
+    mean = mfcc_tensor.mean(dim=1, keepdim=True).to(torch.float64)
+    std = mfcc_tensor.std(dim=1, keepdim=True).to(torch.float64)
+    std = std.clamp(min=1e-6)
+
+    mfcc_tensor = ((mfcc_tensor.to(torch.float64) - mean) / std).to(torch.float32)
+
+    # Ensure fixed length (padding or truncating)
+    mfcc_tensor = F.pad(mfcc_tensor, (0, max(0, MAX_FRAMES - mfcc_tensor.shape[1])))  # Pad if shorter
+    mfcc_tensor = mfcc_tensor[:, :MAX_FRAMES]  # Truncate if longer
+
+    return mfcc_tensor.cpu().numpy(), labels  # Move back to CPU for return
+
   except Exception as e:
     print(f"Error processing {wav_file}: {e}")
     return None, None  

@@ -10,7 +10,6 @@ from lightning.fabric import fabric
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.callbacks.model_checkpoint import ModelCheckpoint
 
-from models.MultiTask import MTLNetwork
 from utils.constants import *
 from utils.dataset import AugmentedTonesDataset
 from utils.selectmodel import SelectModel

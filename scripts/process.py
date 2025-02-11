@@ -59,7 +59,7 @@ def main():
   tqdm.pandas(desc="Removing non-chinese characters")
   df['character'] = df['sentence'].progress_apply(split_chinese_non_chinese)
 
-  tqdm.pandas(desc="Checking even lengths")
+  tqdm.pandas(desc="Ensuring consistent lengths")
   valid_lengths = df.progress_apply(lambda row: len({
     len(row['word_files']), 
     len(row['pinyin_breakdown']), 
@@ -72,13 +72,12 @@ def main():
   exploded[['initial', 'final', 'tone']] = pd.DataFrame(exploded['pinyin_breakdown'].tolist(), index=exploded.index)
   exploded.drop(columns=['pinyin_breakdown'], inplace=True)
 
-  tqdm.pandas(desc="Ensuring valid pinyin")
+  tqdm.pandas(desc="Double checking for valid pinyin")
   valid_chinese_mask = exploded.progress_apply(lambda x: is_valid_pinyin(x['initial'], x['final']), axis=1)
   clean_df = exploded[valid_chinese_mask]
   tqdm.pandas(desc="Processing data")
 
   # -----------Sampling and Splitting------------------------ #
-
   print('Sampling data...')
   sampled_data = proportional_sample(clean_df)
   
@@ -93,8 +92,7 @@ def main():
   X_test, y_test = test_df['word_files'].tolist(), generate_labels(test_df)
   
   # ------------Params setup----------------------- #
-
-  TESTING = True
+  TESTING = False
   
   train_params = list(zip(X_train, y_train, train_augs))
   test_params =  list(zip(X_test, y_test, [False] * len(X_test)))
@@ -104,50 +102,32 @@ def main():
   if TESTING:
     train_params = resample(list(train_params), n_samples=1000)
     test_params = resample(test_params, n_samples=100)
-    test_params = resample(val_params, n_samples=100)
+    val_params = resample(val_params, n_samples=100)
     output_data_dir = TEST_DATA_DIR
 
-  # ----------Train extractions------------------------- #
+  # ----------Train extractions (AUGMENTS) ------------------------- #
+  train_features, train_labels = [], []
+  for params in tqdm(train_params, desc="Train Feature Extraction"):
+    feat, label = feature_extraction(params)  # runs on GPU
+    if feat is not None:
+      train_features.append(feat.cpu())
+      train_labels.append(label)
 
-  # AUGMENTS - TRAIN feature extraction & pairing labels
-  total = len(train_params)
-  chunksize = max(1, total // (POOL_NUM * 2))  
-  with Pool(POOL_NUM) as p:
-    train_results = list(
-      tqdm(
-        p.imap(feature_extraction, train_params, chunksize=chunksize), 
-           total=total, 
-           desc="Train Feature Extraction"
-           )
-      )
-
-  train_results = [(feat, label) for feat, label in train_results if feat is not None]
-  train_features, train_label = zip(*train_results)
-
-  X_train_augmented = np.array(train_features)
-  y_train_augmented = np.array(train_label)
+  X_train_augmented = torch.stack(train_features).numpy()
+  y_train_augmented = np.array(train_labels)
   
   # exporting now as a checkpoint
   np.save(output_data_dir / 'train_features.npy', X_train_augmented)
   np.save(output_data_dir / 'train_labels.npy', y_train_augmented)
   print("Train features and labels saved in \'data\' directory...") 
 
-  # -----------Test Extractions------------------------ #
-  
-  # NO AUGMENTS - TEST feature extraction & pairing labels
-  total = len(test_params)
-  chunksize = max(1, total // (POOL_NUM * 2))  
-  with Pool(POOL_NUM) as p:
-    test_results = list(
-      tqdm(
-        p.imap(feature_extraction, test_params, chunksize=chunksize), 
-           total=total, 
-           desc="Test Feature Extraction"
-           )
-      )
-
-  test_results = [(feat, label) for feat, label in test_results if feat is not None]
-  test_features, test_labels = zip(*test_results)
+  # -----------Test Extractions (NO AUGMENTS)------------------------ #
+  test_features, test_labels = [], []
+  for params in tqdm(test_params, desc="Test Feature Extraction"):
+    feat, label = feature_extraction(params)  # runs on GPU
+    if feat is not None:
+      test_features.append(feat.cpu())
+      test_labels.append(label)
 
   X_test = np.array(test_features)
   y_test = np.array(test_labels)
@@ -158,22 +138,13 @@ def main():
 
   print("Test features and labels saved in \'data\' directory...") 
 
-  # -----------Validation Extractions----------------------- #
-
-  # NO AUGMENTS - VALIDATION feature extraction & pairing labels
-  total = len(val_params)
-  chunksize = max(1, total // (POOL_NUM * 2))  
-  with Pool(POOL_NUM) as p:
-    val_results = list(
-      tqdm(
-        p.imap(feature_extraction, val_params, chunksize=chunksize), 
-           total=total, 
-           desc="Test Feature Extraction"
-           )
-      )
-
-  val_results = [(feat, label) for feat, label in val_results if feat is not None]
-  val_features, val_labels = zip(*val_results)
+  # -----------Validation Extractions (NO AUGMENTS)----------------------- #
+  val_features, val_labels = [], []
+  for params in tqdm(val_params, desc="Validation Feature Extraction"):
+    feat, label = feature_extraction(params)  # runs on GPU
+    if feat is not None:
+      val_features.append(feat.cpu())
+      val_labels.append(label)
 
   X_val = np.array(val_features)
   y_val = np.array(val_labels)

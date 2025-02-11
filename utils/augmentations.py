@@ -7,8 +7,13 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.utils import resample
 import joblib
 import torch
+import torchaudio
+import torchaudio.transforms as T
+import torchaudio.functional as F
+
 
 from utils.constants import *
+from utils.selectmodel import GetDevice
 
 def generate_labels(df: pd.DataFrame) -> List[Tuple[int, int, int, int]]:
   """encodes the labels & saves encoders to decode at prediction time
@@ -78,8 +83,12 @@ def assign_augmentations(X_train: List[str], y_train: Tuple[List[int], List[List
     
   return combined_data
 
+def preemphasis(waveform: torch.Tensor, coeff: float = 0.97) -> torch.Tensor:
+    """PyTorch implementation of preemphasis filter"""
+    return torch.cat((waveform[:1], waveform[1:] - coeff * waveform[:-1]))
 
-def augment_raw_audio(audio, sr, aug_threshold = 0.5):
+
+def augment_raw_audio(audio, sr=16000, aug_threshold = 0.5):
   """randomly applies atleast one of the augmentations 
 
   Args:
@@ -90,24 +99,29 @@ def augment_raw_audio(audio, sr, aug_threshold = 0.5):
   Returns:
       wav: augmented wav form
   """
-  augmented_sample = audio.copy()
-
+  augmented_sample = audio.clone()
+ 
   augmentations = [
-    lambda x: librosa.effects.pitch_shift(y=x, sr=sr, n_steps=np.random.randint(-4, 5)),
-    lambda x: x + (torch.randn_like(torch.from_numpy(x)) * 0.01).numpy(), #0.01 is noise level
-    lambda x: librosa.effects.time_stretch(x, rate=np.random.uniform(0.8, 1.2)),
-    lambda x: librosa.effects.percussive(x),
-    lambda x: librosa.effects.preemphasis(x),
-  ]
+    lambda x: torchaudio.functional.pitch_shift(x, sr, np.random.choice([-4, -2, 0, 2, 4])), 
+    lambda x: x + torch.randn_like(x) * 0.02, # noise
+    lambda x: preemphasis(x),
+    ]
+
+  # augmentations = [
+  #   lambda x: librosa.effects.pitch_shift(y=x, sr=sr, n_steps=np.random.randint(-4, 5)),
+  #   lambda x: x + (torch.randn_like(torch.from_numpy(x)) * 0.01).numpy(), #0.01 is noise level
+  #   lambda x: librosa.effects.time_stretch(x, rate=np.random.uniform(0.8, 1.2)),
+  #   lambda x: librosa.effects.percussive(x),
+  #   lambda x: librosa.effects.preemphasis(x),
+  # ]
 
   # ensures atleast one is chosen
-  chosen_augmentations = [np.random.choice(augmentations)]
-  
-  for augment in augmentations:
-    if np.random.random() < aug_threshold and augment not in chosen_augmentations:
-      chosen_augmentations.append(augment)
+  chosen = [np.random.choice(augmentations)]
+  for aug in augmentations:
+    if np.random.random() < aug_threshold and aug not in chosen:
+      chosen.append(aug)
       
-  for augment in chosen_augmentations:
-    augmented_sample = augment(augmented_sample)
+  for aug in chosen:
+    augmented_sample = aug(augmented_sample)
   
   return augmented_sample

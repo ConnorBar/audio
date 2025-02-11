@@ -17,42 +17,61 @@ class MyLightningModule(L.LightningModule):
   def training_step(self, batch, batch_idx):
     x, y = batch
     predictions = self.model(x)
+
     train_loss = self.model.compute_loss(predictions, y)
-    acc = self.model.compute_accuracy(predictions, y)
-    init_acc, final_acc, tone_acc = self.model.compute_accuracy(predictions, y, average=True)
-    f1 = self.model.compute_f1(predictions, y)
-    
+    acc = self.model.compute_metrics(predictions, y, metric='acc')
+    f1 = self.model.compute_metrics(predictions, y, metric='f1')
+
     self.log("train_loss", train_loss, prog_bar=True)
     self.log("train_acc", acc, prog_bar=True)
+    self.log("train_f1", f1, prog_bar=True)
+
+    init_acc, final_acc, tone_acc, sanity_acc = self.model.compute_metrics(predictions, y, metric='acc', average=False)
 
     self.log("train_init_acc", init_acc)
     self.log("train_final_acc", final_acc)
     self.log("train_tone_acc", tone_acc)
+    self.log("train_sanity_acc", sanity_acc)
 
-    self.log("train_f1", f1, prog_bar=True)
     return train_loss
   
   def test_step(self, batch, batch_idx):
     x, y = batch
-    outputs = self.model(x)
-    test_loss = self.model.compute_loss(outputs, y)
-    acc = self.model.compute_accuracy(outputs, y)
-    f1 = self.model.compute_f1(outputs, y)
+    predictions = self.model(x)
+
+    test_loss = self.model.compute_loss(predictions, y)
+    acc = self.model.compute_metrics(predictions, y, metric='acc')
+    f1 = self.model.compute_metrics(predictions, y, metric='f1')
 
     self.log("test_loss", test_loss, prog_bar=True)
     self.log("test_acc", acc, prog_bar=True)
     self.log("test_f1", f1, prog_bar=True)
 
+    init_acc, final_acc, tone_acc, sanity_acc = self.model.compute_metrics(predictions, y, metric='acc', average=False)
+
+    self.log("test_init_acc", init_acc)
+    self.log("test_final_acc", final_acc)
+    self.log("test_tone_acc", tone_acc)
+    self.log("test_sanity_acc", sanity_acc)
+
   def validation_step(self, batch, batch_idx):
     x, y = batch
-    outputs = self.model(x)
-    val_loss = self.model.compute_loss(outputs, y)
-    acc = self.model.compute_accuracy(outputs, y)
-    f1 = self.model.compute_f1(outputs, y)
+    predictions = self.model(x)
+
+    val_loss = self.model.compute_loss(predictions, y)
+    acc = self.model.compute_metrics(predictions, y, metric='acc')
+    f1 = self.model.compute_metrics(predictions, y, metric='f1')
 
     self.log("val_loss", val_loss, prog_bar=True)
     self.log("val_acc", acc, prog_bar=True)
     self.log("val_f1", f1, prog_bar=True)
+
+    init_acc, final_acc, tone_acc, sanity_acc = self.model.compute_metrics(predictions, y, metric='acc', average=False)
+
+    self.log("val_init_acc", init_acc)
+    self.log("val_final_acc", final_acc)
+    self.log("val_tone_acc", tone_acc)
+    self.log("val_sanity_acc", sanity_acc)
 
   def configure_optimizers(self):
     optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
