@@ -4,6 +4,7 @@ import torch.nn as nn
 from torchmetrics import Accuracy, F1Score, CharErrorRate
 
 class MTLNetwork(nn.Module):
+  # TODO maybe do something with soft param sharing
   def __init__(self, feature_extractor, num_initials, num_finals, num_tones, lstm_hidden_dim=256, hard_param_sharing=True):
     super(MTLNetwork, self).__init__()
     
@@ -24,8 +25,9 @@ class MTLNetwork(nn.Module):
     self.initial_head = nn.Linear(256 * 2, num_initials)
     self.final_head = nn.Linear(256 * 2, num_finals)
     self.tone_head = nn.Linear(256 * 2, num_tones)
-    self.sanity_head = nn.Linear(256 * 2, 2) # sane or insane
+    self.sanity_head = nn.Linear(256 * 2, 2) # sane or insane - phonotactic constraint learning
     
+    # used for debugging
     self.num_initials = num_initials
     self.num_finals = num_finals
     self.num_tones = num_tones
@@ -73,7 +75,7 @@ class MTLNetwork(nn.Module):
     initials_out = self.initial_head(pooled_features)
     finals_out = self.final_head(pooled_features)
     tones_out = self.tone_head(pooled_features)
-    sanity_out = self.tone_head(pooled_features)
+    sanity_out = self.tone_head(pooled_features) # for phonotactic constraint learning
 
     # TODO add masking to make certain combos not possible!!
     

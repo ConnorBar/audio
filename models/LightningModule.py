@@ -5,8 +5,10 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 import lightning as L
 
+from models.MultiTask import MTLNetwork
+
 class MyLightningModule(L.LightningModule):
-  def __init__(self, model, learning_rate=1e-3, batch_size=32, num_classes=4):
+  def __init__(self, model: MTLNetwork, learning_rate=1e-3, batch_size=32, num_classes=4):
     super().__init__()
     self.save_hyperparameters(ignore=[model]) # auto saves all hyper params into hparams
     self.model = model
@@ -75,6 +77,7 @@ class MyLightningModule(L.LightningModule):
 
   def configure_optimizers(self):
     optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
+    # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1) # example scheduler
     return optimizer
   
   # not using this yet but i think that i will need to change how i handle the output from here
