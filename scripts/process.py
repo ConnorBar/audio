@@ -79,7 +79,7 @@ def main():
 
   # -----------Sampling and Splitting------------------------ #
   print('Sampling data...')
-  sampled_data = proportional_sample(clean_df)
+  sampled_data = proportional_sample(clean_df, n_samples=1_000_000)
   
   # test train split
   train_df, temp_df = train_test_split(sampled_data, test_size=0.2, stratify=sampled_data[['final']], random_state=RANDOM_SEED)

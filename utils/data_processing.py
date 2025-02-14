@@ -25,6 +25,8 @@ valid_finals = ['i', 'a', 'ai', 'an', 'ang', 'ao', 'e', 'ei', 'en', 'eng', 'er',
 
 device = GetDevice()
 
+# ------------------------------------------------ #
+
 def breakdown_pinyin(phrase):
   clean_phrase = re.sub(r'[^\w]', '', phrase)
   initial = lazy_pinyin(clean_phrase, style=Style.INITIALS, strict=True)
@@ -65,6 +67,7 @@ valid_pinyin = set("abcdefghijklmnopqrstuvwxyz")  # Allowed characters
 def clean_pinyin(pinyin_list):
   return [''.join(c for c in word if c in valid_pinyin) for word in pinyin_list]
 
+# ------------------------------------------------ #
 
 def proportional_sample(df: pd.DataFrame, n_samples=500_000):
   clean_df = df.copy()
@@ -163,9 +166,8 @@ def feature_extraction(args) -> Tuple[List, List[Tuple[int, int, int, int]]]:
         'center': True,      # Avoid padding artifacts
     }).to(device)
 
-    # print("BEFORE TRANS dims: ", waveform.shape)
     mfccs = mfcc_transform(waveform).squeeze(0)
-    # print("AFTER TRANS dims: ", mfccs.shape)
+
     # Normalize features
     mean = mfccs.mean(dim=1, keepdim=True)
     std = mfccs.std(dim=1, keepdim=True)
@@ -176,40 +178,9 @@ def feature_extraction(args) -> Tuple[List, List[Tuple[int, int, int, int]]]:
       mfccs = F.pad(mfccs, (0, MAX_FRAMES - mfccs.shape[1]))  # Ensure padding
     else:
       mfccs = mfccs[:, :MAX_FRAMES]
-    # print("FINAL dims: ", mfccs.shape)
+
     return mfccs, labels
  
-    # RAW AUDIO AUGMENTATION:
-    if augment:
-      waveform = augment_raw_audio(waveform)
-    # waveform = waveform.to(device)
-    
-    # mfcc normalization 
-    mfcc_transform = T.MFCC(
-        sample_rate=16000,
-        n_mfcc=13,
-        melkwargs={
-            'n_mels': 40,
-            'n_fft': 512,
-            'hop_length': 160,
-            'win_length': 400
-        }
-    )
-    mfcc_tensor = mfcc_transform(waveform)  # Shape: [1, 13, time]
-    mfcc_tensor = mfcc_tensor.squeeze(0)  # Shape: [13, time]
-
-    # use gpu for scaling instead
-    mean = mfcc_tensor.mean(dim=1, keepdim=True).to(torch.float64)
-    std = mfcc_tensor.std(dim=1, keepdim=True).to(torch.float64)
-    std = std.clamp(min=1e-6)
-
-    mfcc_tensor = ((mfcc_tensor.to(torch.float64) - mean) / std).to(torch.float32)
-
-    # Ensure fixed length (padding or truncating)
-    mfcc_tensor = F.pad(mfcc_tensor, (0, max(0, MAX_FRAMES - mfcc_tensor.shape[1])))  # Pad if shorter
-    mfcc_tensor = mfcc_tensor[:, :MAX_FRAMES]  # Truncate if longer
-
-    return mfcc_tensor.cpu().numpy(), labels  # Move back to CPU for return
 
   except Exception as e:
     print(f"Error processing {wav_file}: {e}")

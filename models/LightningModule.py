@@ -3,6 +3,8 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+
 import lightning as L
 
 from models.MultiTask import MTLNetwork
@@ -10,7 +12,7 @@ from models.MultiTask import MTLNetwork
 class MyLightningModule(L.LightningModule):
   def __init__(self, model: MTLNetwork, learning_rate=1e-3, batch_size=32, num_classes=4):
     super().__init__()
-    self.save_hyperparameters(ignore=[model]) # auto saves all hyper params into hparams
+    self.save_hyperparameters(ignore=['model']) # auto saves all hyper params into hparams
     self.model = model
 
   def forward(self, x):
@@ -77,8 +79,21 @@ class MyLightningModule(L.LightningModule):
 
   def configure_optimizers(self):
     optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
-    # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1) # example scheduler
-    return optimizer
+    scheduler = ReduceLROnPlateau(
+      optimizer, 
+      mode="min",       # Minimize the monitored metric (e.g., val_loss)
+      factor=0.1,       # Reduce LR by 0.1
+      patience=3,       # Wait 3 epochs without improvement
+      verbose=True,     # Print a message when LR changes
+      )
+    return {"optimizer": optimizer,
+            "lr_scheduler": {
+              "scheduler": scheduler,
+              "interval": "epoch",
+              "frequency": 1,
+              "monitor": "val_loss"
+              }
+            }
   
   # not using this yet but i think that i will need to change how i handle the output from here
   # since i am doing mtl

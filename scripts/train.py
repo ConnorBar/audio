@@ -1,4 +1,3 @@
-from tkinter.tix import Select
 import numpy as np
 from pyparsing import Word
 import torch
@@ -14,6 +13,8 @@ from utils.constants import *
 from utils.dataset import AugmentedTonesDataset
 from utils.selectmodel import SelectModel
 from models.LightningModule import MyLightningModule, LitDataModule
+
+torch.set_float32_matmul_precision('medium')
 
 def main(hparams):
   devices = hparams.devices
@@ -43,9 +44,9 @@ def main(hparams):
   # lightning model & trainer
   lit_model = MyLightningModule(model=training_model)
   
-  earlystop_callback = EarlyStopping(monitor="val_acc", mode="min", patience=3)
+  earlystop_callback = EarlyStopping(monitor="val_loss", mode="min", patience=3)
   checkpoint_callback = ModelCheckpoint(
-    monitor="val_acc",
+    monitor="val_loss",
     mode="min",
     save_top_k=1,
     filename="best-checkpoint",
@@ -55,7 +56,8 @@ def main(hparams):
                     devices=devices, 
                     accelerator=accelerator,
                     callbacks=[earlystop_callback, checkpoint_callback],
-                    fast_dev_run=7, # for testing
+                    gradient_clip_val=0.5,
+                    # fast_dev_run=7, # for testing
                     # profiler="simple", # also for testing/debugging
   )
   trainer.fit(lit_model, datamodule=lit_dataloader)

@@ -1,17 +1,10 @@
 import re
-import json
 import sys
 from pypinyin import lazy_pinyin
 import torch
 import torchaudio
-import librosa
-import numpy as np
 import pandas as pd
 import multiprocessing as mp
-import jieba
-
-import cProfile
-import pstats
 
 from tqdm import tqdm
 from typing import List
@@ -48,39 +41,42 @@ def get_words(waveform, spans, num_frames):
     for span in spans
   ]
 
-def driver(args):
-  path, transcript, sentence = args
+# ------------------------------------------------ #
 
-  try:
-    waveform16k, _ = torchaudio.load(LARGE_16K_DIR / path)
-    waveform16k = waveform16k[0:1].to(device)
+def process_batch(batch_params):
+  batch_results = []
+  batch_waveforms = []
 
-    emission, token_spans = compute_alignments(waveform16k, transcript)
-    num_frames = emission.size(1)
+  for path, transcript, sentence in batch_params:
+    try:
+      waveform16k, _ = torchaudio.load(LARGE_16K_DIR / path)
+      batch_waveforms.append((waveform16k[0:1].to(device), transcript, sentence))
+    except Exception as e:
+      sys.stderr.write(f"Error loading {path}: {e}\n")
+      sys.stderr.flush()
 
-    words = get_words(waveform16k, token_spans, num_frames)
 
-    # save each word tensor and store filenames
-    word_filenames = []
-    for i, word in enumerate(words):
-      filename = f"{Path(path).stem}_word{i}.pt"
-      filepath = WORD_TENSORS_DIR / filename
-      torch.save(word.cpu(), filepath)
-      word_filenames.append(str(filepath))
+  for waveform, transcript, sentence in batch_waveforms:
+    try:
+      emission, token_spans = compute_alignments(waveform, transcript)
+      num_frames = emission.size(1)
+      words = get_words(waveform, token_spans, num_frames)
 
-    return word_filenames, sentence
+      # save each word tensor and store filenames
+      word_filenames = []
+      for i, word in enumerate(words):
+        filename = f"{Path(path).stem}_word{i}.pt"
+        filepath = WORD_TENSORS_DIR / filename
+        torch.save(word.cpu(), filepath)
+        word_filenames.append(str(filepath))
 
-  except Exception as e:
-    if "targets length is too long for CTC" in str(e):
-      error_message = f"Alignment failed for {path}: {e}\n"
-      sys.stderr.write(error_message)  # Print to stderr to avoid tqdm interference
-      sys.stderr.flush()  # Ensure immediate writing to stderr
 
-    else:
-      sys.stderr.write(f"something else went wrong: {e}")  # Print to stderr to avoid tqdm interference
-      sys.stderr.flush()  # Ensure immediate writing to stderr
+      batch_results.append((word_filenames, sentence))
+    except Exception as e:
+      sys.stderr.write(f"Error processing {path}: {e}")
+      sys.stderr.flush()
 
-    return None  # Ensures the pipeline doesn’t crash
+  return batch_results
 
 # ------------------------------------------------ #
 
@@ -97,27 +93,18 @@ def main():
 
   df['transcript'] = df['sentence'].apply(lambda row: clean_pinyin(lazy_pinyin(row)))
 
+  # ------------------------------------------------ #
 
   params = df[['path', 'transcript', 'sentence']].to_records(index=False).tolist()
-  
-  # total = len(df)
-  # pool_size = min(cpu_count(), 5) 
-  # chunksize = max(1, total // (pool_size * 2))
 
-  # with Pool(pool_size) as p:
-  #   segmentations = list(
-  #     tqdm(
-  #       p.imap_unordered(driver, params, chunksize=chunksize), 
-  #          total=total, 
-  #          desc="Sentence Segmentation"
-  #          )
-  #     )
-  #   sys.stdout.flush()  
+  BATCH_SIZE = 32  # Adjust based on your GPU memory
+  batches = [params[i:i + BATCH_SIZE] for i in range(0, len(params), BATCH_SIZE)]
+    
+  segmentations = []
+  for batch in tqdm(batches, desc="Processing batches"):
+        batch_results = process_batch(batch)
+        segmentations.extend([r for r in batch_results if r is not None])
 
-  segmentations = [driver(param) for param in tqdm(params) ]
-  segmentations = [s for s in segmentations if s is not None]
-
-  
   metadata_df = pd.DataFrame(segmentations, columns=['word_files', 'sentence'])
   metadata_df.to_csv(DATA_DIR / "metadata.csv", index=False)
   

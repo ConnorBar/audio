@@ -11,6 +11,8 @@ class MTLNetwork(nn.Module):
     # remove the last two layers of resnet (AdaptiveAvgPool2d and Linear)
     self.shared_encoder = nn.Sequential(*list(feature_extractor.children())[:-2])
     self.global_avg_pool = nn.AdaptiveAvgPool2d((1, 1)) # if no lstm have this
+    self.dropout = nn.Dropout(0.5)
+    self.bn1 = nn.BatchNorm1d(256 * 2)
 
     # gap to compress spatial feats, lstm cares ab temporal
     # self.global_avg_pool = nn.AdaptiveAvgPool2d((1, None))  # Keep time dim, reduce freq dim
@@ -56,6 +58,8 @@ class MTLNetwork(nn.Module):
     # pooling after resnet, use the other one for lstm
     pooled_features = self.global_avg_pool(feature_map)
     pooled_features = pooled_features.view(pooled_features.size(0), -1)
+    pooled_features = self.dropout(pooled_features)
+    pooled_features = self.bn1(pooled_features)
 
     # to remove freq dim 
     # pooled_features = self.global_avg_pool(feature_map) # Shape: (batch_size, 512, 1, time_steps')
@@ -75,7 +79,7 @@ class MTLNetwork(nn.Module):
     initials_out = self.initial_head(pooled_features)
     finals_out = self.final_head(pooled_features)
     tones_out = self.tone_head(pooled_features)
-    sanity_out = self.tone_head(pooled_features) # for phonotactic constraint learning
+    sanity_out = self.sanity_head(pooled_features) # for phonotactic constraint learning
 
     # TODO add masking to make certain combos not possible!!
     
@@ -103,7 +107,7 @@ class MTLNetwork(nn.Module):
 
     computed_metrics = []
     for prediction, target, evaluator in zip(predictions, target_list, metrics):
-      computed_metrics.append(evaluator(prediction, target))
+      computed_metrics.append(evaluator(prediction.argmax(dim=1), target))
 
     if average:
       return sum(computed_metrics) / len(computed_metrics)
