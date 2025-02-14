@@ -13,6 +13,7 @@ from pypinyin import Style, lazy_pinyin
 from sklearn.utils import resample
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.discriminant_analysis import StandardScaler
+from tqdm import tqdm
 
 from utils.augmentations import augment_raw_audio
 from utils.constants import *
@@ -128,6 +129,45 @@ def mark_augments(df: pd.DataFrame, sample_frac=0.7, augment_frac=0.2, insane_fr
 
 # ------------------------------------------- #
 
+def batch_process_features(params_list: List[Tuple], batch_size: int = 32, desc: str = "Processing") -> Tuple[List, List]:
+    """Processes feature extraction in batches to manage memory usage.
+    
+    Args:
+        params_list: List of (wav_file, labels, augment) tuples to process
+        batch_size: Size of batches to process at once
+        desc: Description for progress bar
+    
+    Returns:
+        Tuple containing:
+            - List of extracted features
+            - List of corresponding labels
+    """
+    features, labels = [], []
+    
+    # Create batches
+    num_samples = len(params_list)
+    num_batches = (num_samples + batch_size - 1) // batch_size
+    
+    for i in tqdm(range(num_batches), desc=desc):
+        start_idx = i * batch_size
+        end_idx = min((i + 1) * batch_size, num_samples)
+        batch_params = params_list[start_idx:end_idx]
+        
+        # Process each item in batch
+        for params in batch_params:
+            feat, label = feature_extraction(params)
+            if feat is not None:
+                features.append(feat.cpu())
+                labels.append(label)
+                
+        # Optional memory cleanup
+        torch.cuda.empty_cache()
+        
+    return features, labels
+
+
+# ------------------------------------------- #
+
 def feature_extraction(args) -> Tuple[List, List[Tuple[int, int, int, int]]]:
   """ takes in wav and returns extracted feature and its labels
 
@@ -138,8 +178,8 @@ def feature_extraction(args) -> Tuple[List, List[Tuple[int, int, int, int]]]:
       Tuple[List, List[Tuple[int, int, int, int]]]: ( mfcc, (initial, final, tone, sanity) )
   """
   TARGET_LENGTH = 16000  # 1 second @16kHz
-  N_FFT = 512           # 32ms window
-  HOP_LENGTH = 160      # 10ms stride
+  N_FFT = 512            # 32ms window
+  HOP_LENGTH = 160       # 10ms stride
   MAX_FRAMES = (TARGET_LENGTH - N_FFT) // HOP_LENGTH + 1  # 96 frames
 
   wav_file, labels, augment = args

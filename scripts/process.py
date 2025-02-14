@@ -24,6 +24,7 @@ Proposed Pipeline:
   validate - only a few extra bad exmaples but also can just use regular non-augmented ones
     
 """
+import argparse
 import ast
 from multiprocessing import Pool
 import pandas as pd
@@ -43,12 +44,12 @@ from utils.constants import *
 
 np.random.seed(RANDOM_SEED)
 
-def main():
+def main(test: bool = False):
 
   # ------------Data Cleaning----------------------- #
 
   print('Reading in data and cleaning...')
-  df = pd.read_csv(DATA_DIR / 'metadata.csv')
+  df = pd.read_csv(METADATA_PATH)
 
   tqdm.pandas(desc="Converting to paths to list")
   df['word_files'] = df['word_files'].progress_apply(ast.literal_eval)
@@ -92,7 +93,7 @@ def main():
   X_test, y_test = test_df['word_files'].tolist(), generate_labels(test_df)
   
   # ------------Params setup----------------------- #
-  TESTING = False
+  TESTING = test
   
   train_params = list(zip(X_train, y_train, train_augs))
   test_params =  list(zip(X_test, y_test, [False] * len(X_test)))
@@ -106,14 +107,9 @@ def main():
     output_data_dir = TEST_DATA_DIR
 
   # ----------Train extractions (AUGMENTS) ------------------------- #
-  train_features, train_labels = [], []
-  for params in tqdm(train_params, desc="Train Feature Extraction"):
-    feat, label = feature_extraction(params)  # runs on GPU
-    if feat is not None:
-      train_features.append(feat.cpu())
-      train_labels.append(label)
+  train_features, train_labels = dp.batch_process_features(train_params, batch_size=32, desc="Train Feature Extraction")
 
-  X_train_augmented = torch.stack(train_features).numpy()
+  X_train_augmented = np.array(train_features)
   y_train_augmented = np.array(train_labels)
   
   # exporting now as a checkpoint
@@ -122,12 +118,7 @@ def main():
   print("Train features and labels saved in \'data\' directory...") 
 
   # -----------Test Extractions (NO AUGMENTS)------------------------ #
-  test_features, test_labels = [], []
-  for params in tqdm(test_params, desc="Test Feature Extraction"):
-    feat, label = feature_extraction(params)  # runs on GPU
-    if feat is not None:
-      test_features.append(feat.cpu())
-      test_labels.append(label)
+  test_features, test_labels = dp.batch_process_features(test_params, batch_size=32, desc="Test Feature Extraction")
 
   X_test = np.array(test_features)
   y_test = np.array(test_labels)
@@ -139,12 +130,7 @@ def main():
   print("Test features and labels saved in \'data\' directory...") 
 
   # -----------Validation Extractions (NO AUGMENTS)----------------------- #
-  val_features, val_labels = [], []
-  for params in tqdm(val_params, desc="Validation Feature Extraction"):
-    feat, label = feature_extraction(params)  # runs on GPU
-    if feat is not None:
-      val_features.append(feat.cpu())
-      val_labels.append(label)
+  val_features, val_labels = dp.batch_process_features(val_params, batch_size=32, desc="Validation Feature Extraction")
 
   X_val = np.array(val_features)
   y_val = np.array(val_labels)
@@ -156,4 +142,7 @@ def main():
   
   
 if __name__ == '__main__':
-  main()
+  parser = argparse.ArgumentParser()
+  parser.add_argument('--test', action='store_true', help='Run in test mode with smaller dataset')
+  args = parser.parse_args()
+  main(args.test)
