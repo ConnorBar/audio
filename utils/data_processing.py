@@ -1,18 +1,15 @@
 import re
 import json
-import librosa
 import torch
 import torchaudio
 import numpy as np
 import pandas as pd
-from typing import List, Tuple
 import torch.nn.functional as F
-import torchaudio.transforms as T
 
+from typing import List, Tuple
 from pypinyin import Style, lazy_pinyin
 from sklearn.utils import resample
 from sklearn.utils.class_weight import compute_class_weight
-from sklearn.discriminant_analysis import StandardScaler
 from tqdm import tqdm
 
 from utils.augmentations import augment_raw_audio
@@ -23,6 +20,8 @@ valid_initials = ['EMPTY', 'b', 'p', 'm', 'f', 'd', 't', 'n', 'l', 'g', 'k', 'h'
        'q', 'x', 'z', 'c', 's', 'zh', 'ch', 'sh', 'r']
 
 valid_finals = ['i', 'a', 'ai', 'an', 'ang', 'ao', 'e', 'ei', 'en', 'eng', 'er', 'i', 'ia', 'ian', 'iang', 'iao', 'ie', 'in', 'ing', 'iong', 'iou', 'o', 'ong', 'ou', 'u', 'ua', 'uai', 'uan', 'uang', 'uei', 'uen', 'ueng', 'uo', 'v', 'van', 've', 'vn']
+
+valid_pinyin = set("abcdefghijklmnopqrstuvwxyz")
 
 device = GetDevice()
 
@@ -44,34 +43,40 @@ def is_valid_pinyin(initial, final):
     return True
 
 def split_chinese_non_chinese(text):
-    # Regular expression to match Chinese characters
-    chinese_pattern = re.compile(r'[\u4e00-\u9fff]')
-    
-    result = []
-    buffer = ""  # Buffer to collect non-Chinese characters
+  # regex to match Chinese characters
+  chinese_pattern = re.compile(r'[\u4e00-\u9fff]')
+  
+  result = []
+  buffer = ""  # buffer to collect non-Chinese characters
 
-    for char in text:
-        if chinese_pattern.match(char):  
-            if buffer:
-                result.append(buffer)  # Append the previous non-Chinese sequence
-                buffer = ""  # Reset buffer
-            result.append(char)  # Append the Chinese character itself
-        else:
-            buffer += char  # Group non-Chinese characters together
-    
-    if buffer:
-        result.append(buffer)  # Append any remaining non-Chinese characters
-    
-    return result
-valid_pinyin = set("abcdefghijklmnopqrstuvwxyz")  # Allowed characters
+  for char in text:
+    if chinese_pattern.match(char):  
+      if buffer:
+        result.append(buffer)  # append the previous non-Chinese sequence
+        buffer = ""  # reset buffer
+      result.append(char)  # append the Chinese character itself
+    else:
+      buffer += char  # group non-Chinese characters together
+  
+  if buffer:
+    result.append(buffer)  # append any remaining non-Chinese characters
+  
+  return result
+
 
 def clean_pinyin(pinyin_list):
   return [''.join(c for c in word if c in valid_pinyin) for word in pinyin_list]
 
 # ------------------------------------------------ #
 
-def proportional_sample(df: pd.DataFrame, n_samples=500_000):
+def proportional_sample(df: pd.DataFrame, n_samples=500_000, whole_dataset=False):
   clean_df = df.copy()
+  clean_df['sanity'] = 1
+  clean_df['augment'] = 0
+
+  if whole_dataset:
+    return clean_df
+  
   for label in ['initial', 'final']:
     unique_classes = np.unique(clean_df[label])
     class_weights = compute_class_weight('balanced', classes=unique_classes, y=clean_df[label])
@@ -85,8 +90,6 @@ def proportional_sample(df: pd.DataFrame, n_samples=500_000):
   
   # drop some cols
   sampled_df.drop(columns=['initial_weight', 'final_weight', 'sample_weight'], inplace=True)
-  sampled_df['sanity'] = 1
-  sampled_df['augment'] = 0
 
   return sampled_df
 

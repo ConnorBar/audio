@@ -44,7 +44,7 @@ from utils.constants import *
 
 np.random.seed(RANDOM_SEED)
 
-def main(test: bool = False):
+def main(test: bool = False, n_samples: int = 1_000_000, whole_dataset: bool = False):
 
   # ------------Data Cleaning----------------------- #
 
@@ -80,7 +80,7 @@ def main(test: bool = False):
 
   # -----------Sampling and Splitting------------------------ #
   print('Sampling data...')
-  sampled_data = proportional_sample(clean_df, n_samples=1_000_000)
+  sampled_data = proportional_sample(clean_df, n_samples=n_samples, whole_dataset=whole_dataset)
   
   # test train split
   train_df, temp_df = train_test_split(sampled_data, test_size=0.2, stratify=sampled_data[['final']], random_state=RANDOM_SEED)
@@ -144,5 +144,8 @@ def main(test: bool = False):
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()
   parser.add_argument('--test', action='store_true', help='Run in test mode with smaller dataset')
+  parser.add_argument('--n_samples', type=int, default=1_000_000, help='Number of samples to sample')
+  parser.add_argument('--whole_dataset', action='store_true', help='Run with whole dataset')
   args = parser.parse_args()
-  main(args.test)
+
+  main(args.test, args.n_samples, args.whole_dataset)
