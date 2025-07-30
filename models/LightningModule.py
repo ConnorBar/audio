@@ -58,6 +58,10 @@ class MyLightningModule(L.LightningModule):
     optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
     return optimizer
   
+  @classmethod
+  def from_config(cls, path):
+    return path
+  
   # not using this yet but i think that i will need to change how i handle the output from here
   # since i am doing mtl
   def predict_step(self, batch):

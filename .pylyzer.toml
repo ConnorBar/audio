@@ -1,0 +1,5 @@
+[pylyzer]
+max_memory = 2048        # limit memory usage to 2gb
+max_workers = 2          # limit number of worker threads
+exclude = ["venv", "__pycache__", "build", "node_modules"]
+

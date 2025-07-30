@@ -5,7 +5,7 @@ from models.ResNet import ResNet18
 from models.BasicCNN import ChineseTonesCNN
 from models.MultiTask import MTLNetwork
 
-def SelectModel(model: str, y_train: np.ndarray) -> MTLNetwork | ResNet18 | ChineseTonesCNN | ValueError:
+def SelectModel(model: str, y_train: torch.Tensor) -> MTLNetwork | ResNet18 | ChineseTonesCNN | ValueError:
   if model == "mtl":
     num_initials = len(torch.unique(y_train[:, 0]))
     num_finals = len(torch.unique(y_train[:, 1]))

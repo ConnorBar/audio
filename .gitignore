@@ -19,6 +19,8 @@ runs/*
 *.ckpt
 *.pyc
 
+*.vscode
+
 # ignore Python cache files and directories
 __pycache__/
 *.py[cod]

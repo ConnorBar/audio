@@ -1,8 +1,5 @@
-from tkinter.tix import Select
 import numpy as np
-from pyparsing import Word
 import torch
-import torch.nn as nn
 from torch.utils.data import random_split, TensorDataset
 from argparse import ArgumentParser
 from lightning import Trainer
@@ -10,7 +7,6 @@ from lightning.fabric import fabric
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.callbacks.model_checkpoint import ModelCheckpoint
 
-from models.MultiTask import MTLNetwork
 from utils.constants import *
 from utils.dataset import AugmentedTonesDataset
 from utils.selectmodel import SelectModel
@@ -40,8 +36,10 @@ def main(hparams):
   train_set, valid_set = random_split(train_dataset, [train_set_size, valid_set_size], generator=seed)
 
   # Datasets -> lightning loader
-  train_dataset = AugmentedTonesDataset(train_set.dataset.tensors[0], train_set.dataset.tensors[1], augment_prob=0.5)
-  val_dataset = AugmentedTonesDataset(valid_set.dataset.tensors[0], valid_set.dataset.tensors[1], augment_prob=0.5)
+  # train_dataset = AugmentedTonesDataset(train_set.dataset.tensors[0], train_set.dataset.tensors[1], augment_prob=0.5)
+  # val_dataset = AugmentedTonesDataset(valid_set.dataset.tensors[0], valid_set.dataset.tensors[1], augment_prob=0.5)
+  train_dataset = AugmentedTonesDataset(train_set.dataset[0], train_set.dataset[1], augment_prob=0.5)
+  val_dataset = AugmentedTonesDataset(valid_set.dataset[0], valid_set.dataset[1], augment_prob=0.5)
   test_dataset_tone = AugmentedTonesDataset(X_test, y_test, augment_prob=0.5)
 
   lit_dataloader = LitDataModule(train_dataset=train_dataset, val_dataset=val_dataset, test_dataset=test_dataset_tone)
